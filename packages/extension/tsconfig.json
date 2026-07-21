@@ -1,0 +1,23 @@
+{
+  "extends": "@bsgames/cc-extension-super-preview-workflow/tsconfig/basic",
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "rootDir": ".",
+    "outDir": "./dist",
+    "sourceMap": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": [
+      "@cocos/creator-types/editor",
+      "node",
+      "vite/client"
+    ],
+    "experimentalDecorators": true
+  }
+}

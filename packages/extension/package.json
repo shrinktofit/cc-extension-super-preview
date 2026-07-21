@@ -1,0 +1,76 @@
+{
+  "name": "super-preview",
+  "vortex": {
+    "extensionName": "Super Preview",
+    "extensionDependencies": {
+      "required": [
+        "asset-db",
+        "engine",
+        "preview",
+        "server"
+      ]
+    }
+  },
+  "exm": {
+    "registry": "http://exm.bluesquall.local/",
+    "registryPackageName": "@bsgames/extension-super-preview"
+  },
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "type": "module",
+  "package_version": 2,
+  "editor": ">=3.8.7",
+  "author": "BluesquallGames",
+  "description": "A better browser preview shell for Cocos Creator and Vortex.",
+  "main": "./dist/main.cjs",
+  "contributions": {
+    "server": "./dist/contributions/server/index.cjs",
+    "toolbar": {
+      "middle": "./dist/contributions/toolbar/index.cjs",
+      "middlePriority": 1
+    },
+    "menu": [
+      {
+        "path": "i18n:menu.project",
+        "label": "Super Preview",
+        "message": "open",
+        "group": "preview"
+      }
+    ],
+    "messages": {
+      "open": {
+        "methods": [
+          "open"
+        ]
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "exports": {
+    "./main": "./dist/main.cjs"
+  },
+  "scripts": {
+    "prepublishOnly": "pnpm --filter @bsgames/cc-extension-super-preview-preview-shell build && node --run build",
+    "build": "node --run typecheck && vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bsgames/cc-extension-super-preview-workflow": "workspace:*",
+    "@cocos/creator-types": "catalog:",
+    "@types/ejs": "catalog:",
+    "@types/express": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@bsgames/cc-extension-super-preview-preview-shell": "workspace:*",
+    "ejs": "catalog:"
+  }
+}

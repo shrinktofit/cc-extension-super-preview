@@ -1,0 +1,22 @@
+{
+  "extends": "@bsgames/cc-extension-super-preview-workflow/tsconfig/basic",
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "@cocos/creator-types/engine",
+      "vite/client"
+    ],
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}

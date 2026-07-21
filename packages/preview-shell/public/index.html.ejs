@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Super Preview</title>
+  <base href="<%= baseHref %>">
+  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="full-screen" content="yes">
+  <meta name="x5-fullscreen" content="true">
+  <meta name="360-fullscreen" content="true">
+  <meta name="renderer" content="webkit">
+  <meta name="force-rendering" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<% for (const href of styleUrls) { -%>
+  <link rel="stylesheet" href="<%= href %>">
+<% } -%>
+</head>
+<body>
+  <div id="super-preview-shell"></div>
+
+  <script>
+    window.__SUPER_PREVIEW_BOOT_CONFIG__ = <%- bootConfigJson %>;
+  </script>
+  <script src="<%= polyfillsUrl %>"></script>
+  <script src="<%= engineImportMapUrl %>" type="systemjs-importmap"></script>
+  <script src="<%= packImportMapUrl %>" type="systemjs-importmap"></script>
+  <script src="<%= globalImportMapUrl %>" type="systemjs-importmap"></script>
+  <script src="<%= systemJsUrl %>"></script>
+  <script>
+    System.setResolutionDetailMapCallback(function() {
+      var url = <%- packResolutionDetailMapUrlJson %>;
+      return fetch(url, { cache: 'no-store' }).then(function(response) {
+        if (!response.ok) {
+          throw new Error('Failed to load resolution detail map: ' + response.status);
+        }
+        return response.json();
+      }).then(function(json) {
+        return { json: json, url: url };
+      });
+    });
+  </script>
+  <script src="<%= engineBundleUrl %>"></script>
+  <script name="setting" src="<%= settingsJsUrl %>"></script>
+  <script type="module" src="<%= bootScriptUrl %>"></script>
+</body>
+</html>

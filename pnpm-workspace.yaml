@@ -1,0 +1,20 @@
+packages:
+  - 'packages/*'
+catalog:
+  '@cocos/creator-types': '3.8.7'
+  '@types/ejs': '^3.1.5'
+  '@types/express': '^5.0.5'
+  '@types/node': '^22.10.7'
+  '@vitejs/plugin-vue': '^5.2.4'
+  'ejs': '^3.1.10'
+  'express': '^5.2.1'
+  'turbo': '^2.9.10'
+  'typescript': '^5.7.3'
+  'vite': '^6.2.2'
+  'vue': '^3.5.39'
+  'vue-tsc': '^2.2.12'
+autoInstallPeers: false
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true

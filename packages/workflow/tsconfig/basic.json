@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "include": [],
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "Node18",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true
+  }
+}
+
