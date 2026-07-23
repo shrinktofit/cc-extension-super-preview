@@ -25,7 +25,6 @@ export async function bootEngineReady(
   const settings = window._CCSettings ?? {};
   const launchSettings = { ...(settings.launch ?? {}) };
   const launchScene = launchSettings.launchScene
-    ?? launchParams.scene
     ?? 'current_scene';
   const overrideSettings = createOverrideSettings(settings, launchSettings, config);
 

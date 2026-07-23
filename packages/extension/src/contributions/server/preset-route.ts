@@ -21,6 +21,7 @@ import type { Request, Response } from 'express';
 interface ResolvedPreset {
   id: string;
   launchParams: LaunchParams;
+  scene?: string;
 }
 
 const builtInPreset: ResolvedPreset = Object.freeze({
@@ -73,13 +74,17 @@ async function renderPreset(
       preset = {
         id: presetId,
         launchParams: result.launchParams,
+        scene: result.scene,
       };
     }
     const launchParams = mergeLaunchParams(
       preset.launchParams,
       readUrlLaunchParams(requestUrl),
     );
-    const metadata = await createPreviewMetadata(request, launchParams);
+    const scene = requestUrl.searchParams.has('scene')
+      ? requestUrl.searchParams.get('scene') ?? undefined
+      : preset.scene;
+    const metadata = await createPreviewMetadata(request, scene, launchParams);
     writeServerDiagnosticLog('info', 'preset-route-rendered', {
       launchScene: metadata.launchScene,
       packageProjectPath: Editor.Project.path,

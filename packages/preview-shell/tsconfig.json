@@ -2,7 +2,8 @@
   "extends": "@bsgames/cc-extension-super-preview-workflow/tsconfig/basic",
   "include": [
     "src/**/*.ts",
-    "src/**/*.vue"
+    "src/**/*.vue",
+    "test/**/*.ts"
   ],
   "compilerOptions": {
     "target": "ES2022",

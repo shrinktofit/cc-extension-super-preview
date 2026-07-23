@@ -10,7 +10,6 @@ import {
   formatErrorForDiagnosticLog,
   writeServerDiagnosticLog,
 } from './contributions/server/diagnostic-log.js';
-import type { LaunchParams } from './launch-params.js';
 
 const presetDeclarationSchema = z.strictObject({
   export: z.string().trim().min(1, 'preset export must be a non-empty name').optional(),
@@ -26,6 +25,7 @@ const presetDeclarationSchema = z.strictObject({
 
 const presetResultSchema = z.strictObject({
   launchParams: z.record(z.string(), z.string()),
+  scene: z.string().optional(),
 });
 
 type PresetDeclaration = z.infer<typeof presetDeclarationSchema>;
@@ -105,10 +105,10 @@ export class PresetRegistry {
     },
   };
 
-  async evaluateLaunchParams(
+  async evaluatePreset(
     presetId: string,
     context: PresetContext,
-  ): Promise<LaunchParams> {
+  ): Promise<PresetResult> {
     const records = this._recordsByPreset.get(presetId);
     if (!records?.size) {
       throw new PresetNotFoundError(presetId);
@@ -131,7 +131,10 @@ export class PresetRegistry {
       );
     }
 
-    return Object.freeze(result.data.launchParams);
+    return Object.freeze({
+      launchParams: Object.freeze(result.data.launchParams),
+      scene: result.data.scene,
+    });
   }
 
   dispose() {

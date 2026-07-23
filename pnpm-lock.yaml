@@ -117,6 +117,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@22.20.0)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.0)
       vue:
         specifier: 'catalog:'
         version: 3.5.39(typescript@5.9.3)

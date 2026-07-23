@@ -100,7 +100,9 @@ describe('Super Preview extension surfaces', () => {
     const { response, state } = createResponse();
     await invokeStringRoute(
       '/super-preview',
-      createRequest('/super-preview?scene=request-scene-uuid&splashPreview=true'),
+      createRequest(
+        '/super-preview?scene=request-scene-uuid&splashPreview=true&ignored=value&--debugMode=true',
+      ),
       response,
     );
 
@@ -120,10 +122,12 @@ describe('Super Preview extension surfaces', () => {
         serverOrigin: 'https://preview.test',
       },
       launchParams: {
-        scene: 'request-scene-uuid',
-        splashPreview: 'true',
+        debugMode: 'true',
       },
     });
+    expect(config.launchParams).not.toHaveProperty('scene');
+    expect(config.launchParams).not.toHaveProperty('ignored');
+    expect(config.launchParams).not.toHaveProperty('splashPreview');
     expect(moduleRequireFile).not.toHaveBeenCalled();
     expect(messageSend).not.toHaveBeenCalledWith('preview', 'ready');
   });
@@ -228,14 +232,15 @@ describe('Super Preview extension surfaces', () => {
 
   it('renders a preset through its default export and exposes launch params only as modules', async () => {
     /// @case
-    /// 1. An enabled extension contributes a preset whose default export returns launch params.
-    /// 2. The user opens the preset route with an explicit query override.
+    /// 1. An enabled extension contributes a control scene beside launch params that contain an application-defined scene key.
+    /// 2. The user opens the preset route with and without an explicit scene query override.
     /// @expect
-    /// The final Super Preview HTML uses the effective scene and publishes the same immutable launch params from one embedded config through native ESM and SystemJS modules without a global or URL payload.
+    /// The sibling preset scene is used by default, the query scene wins when provided, and the application-defined scene remains unchanged in the immutable launch params exposed through native ESM and SystemJS modules.
     const createPreset = vi.fn(async () => ({
+      scene: 'preset-scene-uuid',
       launchParams: {
         fullFlow: '',
-        scene: 'preset-scene-uuid',
+        scene: 'game-scene-param',
         serverPort: '12180',
       },
     }));
@@ -246,8 +251,26 @@ describe('Super Preview extension surfaces', () => {
     });
     const { response, state } = createResponse();
 
+    const presetSceneResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000'),
+      createRequest('/super-preview/preset-example?serverPort=12500&--serverPort=12600'),
+      presetSceneResponse.response,
+    );
+    expect(presetSceneResponse.state.statusCode).toBe(200);
+    expect(presetSceneResponse.state.body).toEqual(
+      expect.stringContaining('/settings.js?scene=preset-scene-uuid'),
+    );
+    expect(readEmbeddedConfig(String(presetSceneResponse.state.body)).launchParams)
+      .toEqual({
+        fullFlow: '',
+        scene: 'game-scene-param',
+        serverPort: '12600',
+      });
+
+    await invokePresetRoute(
+      createRequest(
+        '/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
+      ),
       response,
     );
 
@@ -257,7 +280,7 @@ describe('Super Preview extension surfaces', () => {
     expect(createPreset).toHaveBeenCalledWith({
       projectPath: '',
       requestUrl: new URL(
-        'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000',
+        'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
       ),
     });
     expect(messageRequest).toHaveBeenCalledWith(
@@ -266,7 +289,7 @@ describe('Super Preview extension surfaces', () => {
       {
         presetId: 'example',
         requestUrl:
-          'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000',
+          'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
       },
     );
     const html = String(state.body);
@@ -274,8 +297,8 @@ describe('Super Preview extension surfaces', () => {
     const systemImportMap = readInlineImportMap(html, 'systemjs-importmap', 'super-preview');
     const expectedLaunchParams = {
       fullFlow: '',
-      scene: 'query-scene-uuid',
-      serverPort: '13000',
+      scene: 'query-game-scene-param',
+      serverPort: '13500',
     };
     expect(readEmbeddedConfig(html).launchParams).toEqual(expectedLaunchParams);
     expect(new URL(nativeImportMap.imports['super-preview']).searchParams.has('p')).toBe(false);
@@ -320,9 +343,9 @@ describe('Super Preview extension surfaces', () => {
       ) {
         return {
           launchParams: {
-            scene: 'ipc-scene',
           },
           ok: true,
+          scene: 'ipc-scene',
         };
       }
       return defaultMessageResponse(extension, message);
@@ -346,9 +369,8 @@ describe('Super Preview extension surfaces', () => {
     /// @expect
     /// Both requests render successfully and the contributor module is reloaded for the new main-owned registry lifecycle.
     moduleRequireFile.mockReturnValue(async () => ({
-      launchParams: {
-        scene: 'lifecycle-scene',
-      },
+      launchParams: {},
+      scene: 'lifecycle-scene',
     }));
     const packageInfo = enablePreset('example-preset-lifecycle', {
       id: 'lifecycle',
@@ -448,9 +470,8 @@ describe('Super Preview extension surfaces', () => {
       if (modulePath.endsWith('named.cjs')) {
         return {
           createPreset: async () => ({
-            launchParams: {
-              scene: 'named-scene',
-            },
+            launchParams: {},
+            scene: 'named-scene',
           }),
         };
       }

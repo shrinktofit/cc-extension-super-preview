@@ -1,6 +1,6 @@
 {
   "name": "@bsgames/cc-extension-super-preview-preview-shell",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "files": [
     "lib"
@@ -13,6 +13,7 @@
   "scripts": {
     "build": "node --run typecheck && vite build",
     "dev": "vite build --watch",
+    "test": "vitest run",
     "typecheck": "vue-tsc --noEmit"
   },
   "devDependencies": {
@@ -22,6 +23,7 @@
     "pretty-format": "^30.3.0",
     "typescript": "catalog:",
     "vite": "catalog:",
+    "vitest": "^3.2.4",
     "vue": "catalog:",
     "vue-tsc": "catalog:"
   }

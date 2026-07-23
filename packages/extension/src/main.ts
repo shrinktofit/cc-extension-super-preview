@@ -23,7 +23,7 @@ export const methods = {
     request: EvaluatePresetLaunchParamsRequest,
   ): Promise<EvaluatePresetLaunchParamsResult> {
     try {
-      const launchParams = await presetRegistry.evaluateLaunchParams(
+      const preset = await presetRegistry.evaluatePreset(
         request.presetId,
         {
           projectPath: Editor.Project.path,
@@ -31,7 +31,7 @@ export const methods = {
         },
       );
       return {
-        launchParams,
+        ...preset,
         ok: true,
       };
     } catch (error) {

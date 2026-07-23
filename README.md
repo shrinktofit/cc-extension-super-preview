@@ -66,22 +66,28 @@ An extension can contribute a request-time preset:
 Opening `/super-preview/preset-example` loads the module's default export. A
 declaration may set `"export": "createPreset"` to select a named export instead.
 The callback receives the current `projectPath` and `requestUrl`, and returns
-only string-valued launch parameters:
+a Super Preview scene beside string-valued launch parameters:
 
 ```ts
 export default async function createPreset({ projectPath, requestUrl }) {
   return {
+    scene: 'scene-uuid',
     launchParams: {
-      scene: 'scene-uuid',
       serverPort: '12180',
     },
   };
 }
 ```
 
-The callback runs for every request. Explicit URL query values override preset
-values, so `/super-preview/preset-example?scene=other-scene` remains available
-for one-off overrides.
+The callback runs for every request. The sibling `scene` is a Super Preview
+control field. An explicit `?scene=other-scene` overrides it for that request,
+but is not exposed through the `super-preview` runtime module. Every key inside
+`launchParams`, including an application-defined `scene`, is passed through
+without controlling the preview scene. URL parameters prefixed with `--` are
+the only parameters passed to the game: for example, `?--serverPort=12500`
+overrides `launchParams.serverPort`. Super Preview consumes its recognized
+unprefixed parameters, such as `scene` and `splashPreview`, and ignores other
+unprefixed parameters.
 
 If a preset module fails while it is being evaluated, Super Preview asks the
 editor module loader to clear the declared entry. Dependency cache behavior is

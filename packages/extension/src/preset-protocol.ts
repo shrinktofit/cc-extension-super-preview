@@ -14,6 +14,7 @@ export type EvaluatePresetLaunchParamsResult
   = | {
     launchParams: LaunchParams;
     ok: true;
+    scene?: string;
   }
   | {
     code: PresetLaunchParamsErrorCode;

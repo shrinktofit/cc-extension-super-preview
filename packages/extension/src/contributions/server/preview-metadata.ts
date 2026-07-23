@@ -38,11 +38,14 @@ interface PreviewServerResources {
 
 export async function createPreviewMetadata(
   request: Request,
+  requestedScene: string | undefined,
   launchParams: LaunchParams,
 ): Promise<PreviewMetadata> {
   const serverOrigin = inferServerOrigin(request);
-  const launchScene = await resolveLaunchScene(launchParams);
-  const splashPreview = launchParams.splashPreview === 'true';
+  const launchScene = await resolveLaunchScene(requestedScene);
+  const splashPreview = createPreviewRequestUrl(request)
+    .searchParams
+    .get('splashPreview') === 'true';
   const resources = await resolvePreviewServerResources(launchScene, splashPreview);
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
 
@@ -77,8 +80,8 @@ export async function createPreviewMetadata(
   };
 }
 
-async function resolveLaunchScene(launchParams: LaunchParams) {
-  const requestedScene = launchParams.scene?.trim();
+async function resolveLaunchScene(scene: string | undefined) {
+  const requestedScene = scene?.trim();
   const configuredScene = requestedScene
     ? undefined
     : await Editor.Profile.getConfig('preview', 'general.start_scene');
