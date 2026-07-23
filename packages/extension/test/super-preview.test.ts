@@ -1,5 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Request, Response } from 'express';
 
 interface ResponseState {
@@ -12,7 +26,10 @@ interface ResponseState {
 const messageRequest = vi.fn();
 const messageSend = vi.fn();
 const profileGetConfig = vi.fn();
+const moduleRemoveCache = vi.fn();
+const moduleRequireFile = vi.fn();
 const broadcastListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+const enabledPresetPackages: Editor.Interface.PackageInfo[] = [];
 
 const addBroadcastListener = vi.fn((name: string, listener: (...args: unknown[]) => void) => {
   const listeners = broadcastListeners.get(name) ?? new Set();
@@ -33,6 +50,10 @@ vi.stubGlobal('Editor', {
     request: messageRequest,
     send: messageSend,
   },
+  Module: {
+    removeCache: moduleRemoveCache,
+    requireFile: moduleRequireFile,
+  },
   Profile: {
     getConfig: profileGetConfig,
   },
@@ -43,7 +64,11 @@ vi.stubGlobal('Editor', {
 
 const { get } = await import('../src/contributions/server/index.js');
 const toolbar = await import('../src/contributions/toolbar/index.js');
-const { methods, unload } = await import('../src/main.js');
+const {
+  contributions: presetContributions,
+  methods,
+  unload,
+} = await import('../src/main.js');
 
 describe('Super Preview extension surfaces', () => {
   beforeEach(() => {
@@ -52,8 +77,16 @@ describe('Super Preview extension surfaces', () => {
     removeBroadcastListener.mockClear();
     messageRequest.mockReset();
     messageSend.mockReset();
+    moduleRemoveCache.mockReset();
+    moduleRequireFile.mockReset();
     profileGetConfig.mockReset();
     installDefaultEditorResponses();
+  });
+
+  afterEach(() => {
+    for (const packageInfo of enabledPresetPackages.splice(0)) {
+      presetContributions.disable(packageInfo);
+    }
   });
 
   it('keeps the built-in root route available and renders only the stable route', async () => {
@@ -80,6 +113,18 @@ describe('Super Preview extension surfaces', () => {
     expect(state.body).toEqual(expect.stringContaining(
       'https://preview.test/scripting/engine/cache/dev/preview/bundled/index.js',
     ));
+    const config = readEmbeddedConfig(String(state.body));
+    expect(config).toMatchObject({
+      boot: {
+        previewServerUrl: 'https://preview.test/super-preview',
+        serverOrigin: 'https://preview.test',
+      },
+      launchParams: {
+        scene: 'request-scene-uuid',
+        splashPreview: 'true',
+      },
+    });
+    expect(moduleRequireFile).not.toHaveBeenCalled();
     expect(messageSend).not.toHaveBeenCalledWith('preview', 'ready');
   });
 
@@ -181,6 +226,327 @@ describe('Super Preview extension surfaces', () => {
     );
   });
 
+  it('renders a preset through its default export and exposes launch params only as modules', async () => {
+    /// @case
+    /// 1. An enabled extension contributes a preset whose default export returns launch params.
+    /// 2. The user opens the preset route with an explicit query override.
+    /// @expect
+    /// The final Super Preview HTML uses the effective scene and publishes the same immutable launch params from one embedded config through native ESM and SystemJS modules without a global or URL payload.
+    const createPreset = vi.fn(async () => ({
+      launchParams: {
+        fullFlow: '',
+        scene: 'preset-scene-uuid',
+        serverPort: '12180',
+      },
+    }));
+    moduleRequireFile.mockReturnValue(createPreset);
+    const packageInfo = enablePreset('example-preset-default', {
+      id: 'example',
+      module: './dist/example.cjs',
+    });
+    const { response, state } = createResponse();
+
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000'),
+      response,
+    );
+
+    expect(state.statusCode).toBe(200);
+    expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=query-scene-uuid'));
+    expect(state.body).not.toEqual(expect.stringContaining('__SUPER_PREVIEW'));
+    expect(createPreset).toHaveBeenCalledWith({
+      projectPath: '',
+      requestUrl: new URL(
+        'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000',
+      ),
+    });
+    expect(messageRequest).toHaveBeenCalledWith(
+      'super-preview',
+      'evaluate-preset-launch-params',
+      {
+        presetId: 'example',
+        requestUrl:
+          'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&serverPort=13000',
+      },
+    );
+    const html = String(state.body);
+    const nativeImportMap = readInlineImportMap(html, 'importmap');
+    const systemImportMap = readInlineImportMap(html, 'systemjs-importmap', 'super-preview');
+    const expectedLaunchParams = {
+      fullFlow: '',
+      scene: 'query-scene-uuid',
+      serverPort: '13000',
+    };
+    expect(readEmbeddedConfig(html).launchParams).toEqual(expectedLaunchParams);
+    expect(new URL(nativeImportMap.imports['super-preview']).searchParams.has('p')).toBe(false);
+    expect(new URL(systemImportMap.imports['super-preview']).searchParams.has('p')).toBe(false);
+
+    presetContributions.disable(packageInfo);
+  });
+
+  it('keeps contributor module loading behind a private main-process message', async () => {
+    /// @case
+    /// 1. Main registers a preset while the server process receives a stubbed IPC result.
+    /// 2. The server renders that preset route.
+    /// @expect
+    /// The manifest keeps the message private and the server uses the IPC result without loading the contributor module itself.
+    const packageJson = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as {
+      contributions?: {
+        messages?: Record<string, {
+          methods?: string[];
+          public?: boolean;
+        }>;
+      };
+    };
+    expect(
+      packageJson.contributions?.messages?.['evaluate-preset-launch-params'],
+    ).toEqual({
+      methods: ['evaluate-preset-launch-params'],
+      public: false,
+    });
+    enablePreset('example-preset-ipc-boundary', {
+      id: 'ipc-boundary',
+      module: './dist/ipc-boundary.cjs',
+    });
+    messageRequest.mockImplementation(async (
+      extension: string,
+      message: string,
+    ) => {
+      if (
+        extension === 'super-preview'
+        && message === 'evaluate-preset-launch-params'
+      ) {
+        return {
+          launchParams: {
+            scene: 'ipc-scene',
+          },
+          ok: true,
+        };
+      }
+      return defaultMessageResponse(extension, message);
+    });
+
+    const { response, state } = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-ipc-boundary'),
+      response,
+    );
+
+    expect(state.statusCode).toBe(200);
+    expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=ipc-scene'));
+    expect(moduleRequireFile).not.toHaveBeenCalled();
+  });
+
+  it('recreates preset state after its contribution is disabled and enabled', async () => {
+    /// @case
+    /// 1. Main enables a preset contribution and the server requests it through extension IPC.
+    /// 2. Main disables and then enables the same contribution before another server request.
+    /// @expect
+    /// Both requests render successfully and the contributor module is reloaded for the new main-owned registry lifecycle.
+    moduleRequireFile.mockReturnValue(async () => ({
+      launchParams: {
+        scene: 'lifecycle-scene',
+      },
+    }));
+    const packageInfo = enablePreset('example-preset-lifecycle', {
+      id: 'lifecycle',
+      module: './dist/lifecycle.cjs',
+    });
+
+    const firstResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-lifecycle'),
+      firstResponse.response,
+    );
+    expect(firstResponse.state.statusCode).toBe(200);
+
+    presetContributions.disable(packageInfo);
+    presetContributions.enable(packageInfo, {
+      presets: [{
+        id: 'lifecycle',
+        module: './dist/lifecycle.cjs',
+      }],
+    });
+
+    const secondResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-lifecycle'),
+      secondResponse.response,
+    );
+    expect(secondResponse.state.statusCode).toBe(200);
+    expect(moduleRequireFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the preset entry and logs the original module evaluation error', async () => {
+    /// @case
+    /// 1. A preset entry throws during module evaluation.
+    /// @expect
+    /// The route returns 500, requests cleanup for the declared entry, and diagnostics preserve the evaluation error.
+    const projectPath = mkdtempSync(join(tmpdir(), 'super-preview-preset-error-'));
+    const moduleError = new Error('preset module evaluation failed');
+    moduleRequireFile.mockImplementation(() => {
+      throw moduleError;
+    });
+    enablePreset('example-preset-module-error', {
+      id: 'module-error',
+      module: './dist/module-error.cjs',
+    });
+    Reflect.set(Editor.Project, 'path', projectPath);
+
+    try {
+      const { response, state } = createResponse();
+      await invokePresetRoute(
+        createRequest('/super-preview/preset-module-error'),
+        response,
+      );
+
+      expect(state.statusCode).toBe(500);
+      expect(moduleRemoveCache).toHaveBeenCalledTimes(1);
+      expect(moduleRemoveCache).toHaveBeenCalledWith(
+        'V:\\extensions\\example-preset-module-error\\dist\\module-error.cjs',
+      );
+      const logDirectory = join(projectPath, 'temp', 'super-preview', 'logs');
+      const [logFile] = readdirSync(logDirectory);
+      const records = readFileSync(join(logDirectory, logFile), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as {
+          event: string;
+          payload?: {
+            error?: {
+              message?: string;
+            };
+          };
+        });
+      expect(records.find((record) => record.event === 'preset-route-error'))
+        .toMatchObject({
+          event: 'preset-route-error',
+          payload: {
+            error: {
+              message: moduleError.message,
+            },
+          },
+        });
+    } finally {
+      Reflect.set(Editor.Project, 'path', '');
+      rmSync(projectPath, {
+        force: true,
+        recursive: true,
+      });
+    }
+  });
+
+  it('loads a configured preset export and rejects invalid callback results', async () => {
+    /// @case
+    /// 1. One preset selects a named module export and another returns unsupported data.
+    /// 2. Each preset route is requested.
+    /// @expect
+    /// The configured export renders normally while the invalid contribution fails visibly with status 500.
+    moduleRequireFile.mockImplementation((modulePath: string) => {
+      if (modulePath.endsWith('named.cjs')) {
+        return {
+          createPreset: async () => ({
+            launchParams: {
+              scene: 'named-scene',
+            },
+          }),
+        };
+      }
+      return {
+        default: async () => ({
+          launchParams: {
+            serverPort: 12180,
+          },
+        }),
+      };
+    });
+    enablePreset('example-preset-named', {
+      export: 'createPreset',
+      id: 'named',
+      module: './dist/named.cjs',
+    });
+    enablePreset('example-preset-invalid', {
+      id: 'invalid',
+      module: './dist/invalid.cjs',
+    });
+
+    const namedResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-named'),
+      namedResponse.response,
+    );
+    expect(namedResponse.state.statusCode).toBe(200);
+    expect(namedResponse.state.body).toEqual(
+      expect.stringContaining('/settings.js?scene=named-scene'),
+    );
+
+    const invalidResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-invalid'),
+      invalidResponse.response,
+    );
+    expect(invalidResponse.state.statusCode).toBe(500);
+  });
+
+  it('reports missing and conflicting enabled presets without falling back', async () => {
+    /// @case
+    /// 1. A missing preset is requested and two enabled extensions claim another preset ID.
+    /// 2. Super Preview resolves both routes.
+    /// @expect
+    /// Missing presets return 404 and contribution conflicts return 409 instead of rendering the ordinary preview.
+    moduleRequireFile.mockReturnValue({
+      default: async () => ({ launchParams: {} }),
+    });
+    enablePreset('example-preset-conflict-a', {
+      id: 'conflict',
+      module: './dist/a.cjs',
+    });
+    enablePreset('example-preset-conflict-b', {
+      id: 'conflict',
+      module: './dist/b.cjs',
+    });
+
+    const missingResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-missing'),
+      missingResponse.response,
+    );
+    expect(missingResponse.state.statusCode).toBe(404);
+
+    const conflictResponse = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-conflict'),
+      conflictResponse.response,
+    );
+    expect(conflictResponse.state.statusCode).toBe(409);
+    expect(conflictResponse.state.body).not.toEqual(
+      expect.stringContaining('id="super-preview-shell"'),
+    );
+  });
+
+  it('rejects invalid preset declarations before loading their modules', async () => {
+    /// @case
+    /// 1. An extension contributes a preset whose module escapes its package.
+    /// 2. The user requests that preset.
+    /// @expect
+    /// The invalid contribution is not registered, the route returns 404, and no contributor module is loaded.
+    enablePreset('example-preset-escaped', {
+      id: 'escaped',
+      module: '../outside.cjs',
+    });
+
+    const { response, state } = createResponse();
+    await invokePresetRoute(
+      createRequest('/super-preview/preset-escaped'),
+      response,
+    );
+
+    expect(state.statusCode).toBe(404);
+    expect(moduleRequireFile).not.toHaveBeenCalled();
+  });
+
   it('opens the stable route through the extension message', async () => {
     /// @case
     /// 1. The Project menu sends the extension open message.
@@ -276,6 +642,39 @@ describe('Super Preview extension surfaces', () => {
     expect(validAssetResponse.state.statusCode).toBe(200);
     expect(Buffer.isBuffer(validAssetResponse.state.body)).toBe(true);
     unload();
+  });
+
+  it('emits native and SystemJS runtime loading branches without a static bare import', async () => {
+    /// @case
+    /// 1. The published Preview Shell boot entry and its imported chunk are inspected.
+    /// 2. The page has emitted native and SystemJS import maps for the same runtime module.
+    /// @expect
+    /// The build artifact contains both dynamic loading branches and no static bare runtime import; browser behavior is covered by runtime smoke tests.
+    const entryResponse = createResponse();
+    await invokeAssetRoute(
+      createRequest('/super-preview/assets/boot.js', {}, ['assets/boot.js']),
+      entryResponse.response,
+    );
+    const entrySource = readResponseBuffer(entryResponse.state.body);
+    const chunkName = entrySource.match(/import\s+"\.\/([^"]+)"/u)?.[1];
+    expect(chunkName).toBeTruthy();
+
+    const chunkResponse = createResponse();
+    await invokeAssetRoute(
+      createRequest(
+        `/super-preview/assets/${chunkName}`,
+        {},
+        [`assets/${chunkName}`],
+      ),
+      chunkResponse.response,
+    );
+    const bootSource = `${entrySource}\n${readResponseBuffer(chunkResponse.state.body)}`;
+
+    expect(bootSource).not.toMatch(/\bfrom\s+["']super-preview["']/u);
+    expect(bootSource).toMatch(/HTMLScriptElement\.supports\?\.\(["']importmap["']\)/u);
+    expect(bootSource).toMatch(/\bimport\(["']super-preview["']\)/u);
+    expect(bootSource).toMatch(/globalThis\.System/u);
+    expect(bootSource).toMatch(/\.import\(["']super-preview["']\)/u);
   });
 });
 
@@ -378,7 +777,24 @@ function installDefaultEditorResponses() {
   messageRequest.mockImplementation(defaultMessageResponse);
 }
 
-async function defaultMessageResponse(extension: string, message: string) {
+async function defaultMessageResponse(
+  extension: string,
+  message: string,
+  request?: unknown,
+) {
+  if (
+    extension === 'super-preview'
+    && message === 'evaluate-preset-launch-params'
+  ) {
+    const evaluatePresetLaunchParams = Reflect.get(
+      methods,
+      'evaluate-preset-launch-params',
+    ) as ((request: unknown) => unknown) | undefined;
+    if (!evaluatePresetLaunchParams) {
+      throw new Error('Missing main evaluate-preset-launch-params method');
+    }
+    return evaluatePresetLaunchParams(request);
+  }
   if (extension === 'engine' && message === 'query-engine-info') {
     return {
       outputs: {
@@ -396,7 +812,11 @@ async function defaultMessageResponse(extension: string, message: string) {
 }
 
 async function invokeStringRoute(url: string, request: Request, response: Response) {
-  const route = get.find((entry) => entry.url === url);
+  const pathname = new URL(request.originalUrl ?? request.url, 'https://preview.test').pathname;
+  const route = get.find((entry) => (
+    entry.url === url
+    || (entry.url instanceof RegExp && entry.url.test(pathname))
+  ));
   if (!route) {
     throw new Error(`Missing server route: ${url}`);
   }
@@ -404,11 +824,93 @@ async function invokeStringRoute(url: string, request: Request, response: Respon
 }
 
 async function invokeAssetRoute(request: Request, response: Response) {
-  const route = get.find((entry) => entry.url instanceof RegExp);
+  const route = get.find((entry) => (
+    entry.url instanceof RegExp
+    && entry.url.source.includes('assets')
+  ));
   if (!route) {
     throw new Error('Missing shell asset route');
   }
   await route.handle(request, response);
+}
+
+async function invokePresetRoute(request: Request, response: Response) {
+  const pathname = new URL(request.originalUrl ?? request.url, 'https://preview.test').pathname;
+  const route = get.find((entry) => entry.url instanceof RegExp && entry.url.test(pathname));
+  if (!route) {
+    throw new Error('Missing preset route');
+  }
+  request.params = (route.url instanceof RegExp
+    ? route.url.exec(pathname)?.slice(1) ?? []
+    : []) as unknown as Request['params'];
+  await route.handle(request, response);
+}
+
+function enablePreset(
+  packageName: string,
+  preset: {
+    export?: string;
+    id: string;
+    module: string;
+  },
+  packagePath = `V:\\extensions\\${packageName}`,
+) {
+  const packageInfo = {
+    debug: false,
+    enable: true,
+    info: {
+      name: packageName,
+      version: '1.0.0',
+    },
+    invalid: false,
+    name: packageName,
+    path: packagePath,
+    version: '1.0.0',
+  } satisfies Editor.Interface.PackageInfo;
+  enabledPresetPackages.push(packageInfo);
+  presetContributions.enable(packageInfo, {
+    presets: [preset],
+  });
+  return packageInfo;
+}
+
+function readInlineImportMap(
+  html: string,
+  type: string,
+  requiredSpecifier?: string,
+) {
+  const scripts = Array.from(
+    html.matchAll(new RegExp(`<script type="${type}">([\\s\\S]*?)<\\/script>`, 'gu')),
+  );
+  for (const script of scripts) {
+    const importMap = JSON.parse(script[1]) as {
+      imports: Record<string, string>;
+    };
+    if (!requiredSpecifier || importMap.imports[requiredSpecifier]) {
+      return importMap;
+    }
+  }
+  throw new Error(`Missing inline ${type} for ${requiredSpecifier ?? 'runtime'}`);
+}
+
+function readEmbeddedConfig(html: string) {
+  const script = html.match(
+    /<script id="super-preview-config" type="application\/json">([\s\S]*?)<\/script>/u,
+  );
+  if (!script?.[1]) {
+    throw new Error('Missing embedded Super Preview config');
+  }
+  return JSON.parse(script[1]) as {
+    boot: Record<string, string>;
+    launchParams: Record<string, string>;
+  };
+}
+
+function readResponseBuffer(body: unknown) {
+  if (!Buffer.isBuffer(body)) {
+    throw new Error('Expected a binary server response');
+  }
+  return body.toString('utf8');
 }
 
 function createRequest(path: string, query: Record<string, string> = {}, params: string[] = []) {

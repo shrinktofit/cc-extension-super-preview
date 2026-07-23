@@ -28,6 +28,7 @@ export default defineConfig([
         projectService: {
           allowDefaultProject: [
             'eslint.config.js',
+            'packages/preview-shell/public/assets/*.js',
             'packages/*/vite.config.ts',
             'packages/*/vitest.config.ts',
           ],
@@ -54,6 +55,17 @@ export default defineConfig([
         switchCase: 0,
       }],
       'n/no-unsupported-features/node-builtins': 'off',
+    },
+  },
+  {
+    files: [
+      'packages/preview-shell/public/assets/*.js',
+    ],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        System: 'readonly',
+      },
     },
   },
   {

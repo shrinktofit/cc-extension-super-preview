@@ -15,14 +15,17 @@ export interface CCPreviewSettings extends Record<string, unknown> {
 
 type CCOverrideSettings = import('cc').IGameConfig['overrideSettings'] & CCPreviewSettings;
 
-export async function bootEngineReady(ui: PreviewShellUi, config: SuperPreviewBootConfig) {
+export async function bootEngineReady(
+  ui: PreviewShellUi,
+  config: SuperPreviewBootConfig,
+  launchParams: Readonly<Record<string, string>>,
+) {
   installGameInitStageLogger(ui);
 
   const settings = window._CCSettings ?? {};
   const launchSettings = { ...(settings.launch ?? {}) };
-  const searchParams = new URLSearchParams(window.location.search);
   const launchScene = launchSettings.launchScene
-    ?? searchParams.get('scene')
+    ?? launchParams.scene
     ?? 'current_scene';
   const overrideSettings = createOverrideSettings(settings, launchSettings, config);
 
@@ -41,7 +44,7 @@ export async function bootEngineReady(ui: PreviewShellUi, config: SuperPreviewBo
 
   ui.reportBootStage('game:init');
   await game.init({
-    debugMode: searchParams.get('debug') === 'false' ? DebugMode.NONE : DebugMode.INFO,
+    debugMode: launchParams.debug === 'false' ? DebugMode.NONE : DebugMode.INFO,
     overrideSettings,
   });
 

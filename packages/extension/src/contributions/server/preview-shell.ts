@@ -22,16 +22,23 @@ interface BootConfig {
   serverOrigin: string;
 }
 
+interface SuperPreviewConfig {
+  boot: BootConfig;
+  launchParams: PreviewMetadata['launchParams'];
+}
+
 interface PreviewShellTemplateLocals {
   baseHref: string;
-  bootConfigJson: string;
   bootScriptUrl: string;
+  configJson: string;
   engineBundleUrl: string;
   engineImportMapUrl: string;
   globalImportMapUrl: string;
   packImportMapUrl: string;
   packResolutionDetailMapUrlJson: string;
   polyfillsUrl: string;
+  runtimeImportMapJson: string;
+  runtimeSystemImportMapJson: string;
   settingsJsUrl: string;
   styleUrls: string[];
   systemJsUrl: string;
@@ -54,24 +61,43 @@ class PreviewShellAssetError extends Error {
 export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
   const manifest = readPreviewShellManifest();
   const bootEntry = getManifestEntry(manifest, 'src/boot.ts');
+  const runtimeEntry = getManifestEntry(manifest, 'src/runtime.ts');
   const templatePath = getPreviewShellTemplatePath();
   const template = readFileSync(templatePath, 'utf8');
+  const config: SuperPreviewConfig = {
+    boot: createBootConfig(metadata),
+    launchParams: metadata.launchParams,
+  };
   const locals: PreviewShellTemplateLocals = {
     baseHref: `${metadata.serverOrigin}/`,
-    bootConfigJson: toScriptJson(createBootConfig(metadata)),
     bootScriptUrl: toPreviewShellAssetUrl(metadata.serverOrigin, bootEntry.file),
+    configJson: toScriptJson(config),
     engineBundleUrl: metadata.engineBundleUrl,
     engineImportMapUrl: metadata.engineImportMapUrl,
     globalImportMapUrl: metadata.globalImportMapUrl,
     packImportMapUrl: metadata.packImportMapUrl,
     packResolutionDetailMapUrlJson: toScriptJson(metadata.packResolutionDetailMapUrl),
     polyfillsUrl: metadata.polyfillsUrl,
+    runtimeImportMapJson: toScriptJson(
+      createRuntimeImportMap(metadata.serverOrigin, runtimeEntry.file),
+    ),
+    runtimeSystemImportMapJson: toScriptJson(
+      createRuntimeImportMap(metadata.serverOrigin, 'assets/runtime.system.js'),
+    ),
     settingsJsUrl: metadata.settingsJsUrl,
     styleUrls: [toPreviewShellAssetUrl(metadata.serverOrigin, 'assets/style.css')],
     systemJsUrl: metadata.systemJsUrl,
   };
 
   return renderEjs(template, locals, { filename: templatePath });
+}
+
+function createRuntimeImportMap(serverOrigin: string, assetPath: string) {
+  return {
+    imports: {
+      'super-preview': toPreviewShellAssetUrl(serverOrigin, assetPath),
+    },
+  };
 }
 
 export function sendSuperPreviewShellAsset(response: Response, assetPath: string) {
@@ -196,6 +222,7 @@ function getContentType(filePath: string) {
   case '.html':
     return 'text/html; charset=utf-8';
   case '.js':
+  case '.mjs':
     return 'application/javascript; charset=utf-8';
   case '.json':
   case '.map':

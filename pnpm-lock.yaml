@@ -68,6 +68,9 @@ importers:
       ejs:
         specifier: 'catalog:'
         version: 3.1.10
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@bsgames/cc-extension-super-preview-workflow':
         specifier: workspace:*
@@ -95,13 +98,6 @@ importers:
         version: 3.2.7(@types/node@22.20.0)
 
   packages/preview-shell:
-    dependencies:
-      pretty-format:
-        specifier: ^30.3.0
-        version: 30.4.1
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.39(typescript@5.9.3)
     devDependencies:
       '@bsgames/cc-extension-super-preview-workflow':
         specifier: workspace:*
@@ -112,12 +108,18 @@ importers:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 5.2.4(vite@6.4.3(@types/node@22.20.0))(vue@3.5.39(typescript@5.9.3))
+      pretty-format:
+        specifier: ^30.3.0
+        version: 30.4.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vite:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@22.20.0)
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.39(typescript@5.9.3)
       vue-tsc:
         specifier: 'catalog:'
         version: 2.2.12(typescript@5.9.3)
@@ -1563,6 +1565,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@babel/helper-string-parser@7.29.7': {}
@@ -2927,3 +2932,5 @@ snapshots:
   xml-name-validator@4.0.0: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@4.4.3: {}

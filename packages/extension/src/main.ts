@@ -2,9 +2,57 @@ import { URL } from 'node:url';
 import { superPreviewRoutePrefix } from './constants.js';
 import { extnameMap } from './contributions/server/extname-map.js';
 import { logger } from './logger.js';
+import {
+  PresetConflictError,
+  PresetNotFoundError,
+  PresetRegistry,
+} from './preset-registry.js';
+import {
+  PresetLaunchParamsErrorCode,
+  type EvaluatePresetLaunchParamsRequest,
+  type EvaluatePresetLaunchParamsResult,
+} from './preset-protocol.js';
 import { selfExtensionName } from './self-info.js';
 
+const presetRegistry = new PresetRegistry();
+
+export const contributions = presetRegistry.contributions;
+
 export const methods = {
+  async 'evaluate-preset-launch-params'(
+    request: EvaluatePresetLaunchParamsRequest,
+  ): Promise<EvaluatePresetLaunchParamsResult> {
+    try {
+      const launchParams = await presetRegistry.evaluateLaunchParams(
+        request.presetId,
+        {
+          projectPath: Editor.Project.path,
+          requestUrl: new URL(request.requestUrl),
+        },
+      );
+      return {
+        launchParams,
+        ok: true,
+      };
+    } catch (error) {
+      if (error instanceof PresetNotFoundError) {
+        return {
+          code: PresetLaunchParamsErrorCode.notFound,
+          message: error.message,
+          ok: false,
+        };
+      }
+      if (error instanceof PresetConflictError) {
+        return {
+          code: PresetLaunchParamsErrorCode.conflict,
+          message: error.message,
+          ok: false,
+        };
+      }
+      throw error;
+    }
+  },
+
   async open() {
     const previewBaseUrl = await Editor.Message.request('preview', 'query-preview-url');
     if (typeof previewBaseUrl !== 'string' || !previewBaseUrl) {
@@ -21,6 +69,7 @@ export function load() {
 }
 
 export function unload() {
+  presetRegistry.dispose();
   extnameMap.dispose();
   logger.info(`${selfExtensionName} unloaded`);
 }

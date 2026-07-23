@@ -1,15 +1,20 @@
-import type { SuperPreviewBootConfig } from './config';
 import type { CCPreviewSettings } from './engine-ready';
 
 declare global {
-  interface Window {
-    __SUPER_PREVIEW_BOOT_CONFIG__?: SuperPreviewBootConfig;
-    _CCSettings?: CCPreviewSettings;
-    System?: {
-      import: (moduleName: 'cc') => Promise<typeof import('cc')>;
-      prepareImport?: (processScripts?: boolean) => Promise<void> | void;
+  interface SuperPreviewSystemJs {
+    import: {
+      (moduleName: 'cc'): Promise<typeof import('cc')>;
+      (moduleName: 'super-preview'): Promise<typeof import('super-preview')>;
     };
+    prepareImport?: (processScripts?: boolean) => Promise<void> | void;
   }
+
+  interface Window {
+    _CCSettings?: CCPreviewSettings;
+    System?: SuperPreviewSystemJs;
+  }
+
+  var System: SuperPreviewSystemJs | undefined;
 }
 
 export {};

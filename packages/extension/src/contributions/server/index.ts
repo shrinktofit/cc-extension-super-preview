@@ -5,10 +5,12 @@ import {
   writeServerDiagnosticLog,
 } from './diagnostic-log.js';
 import { extnameMap } from './extname-map.js';
-import { createPreviewMetadata } from './preview-metadata.js';
+import {
+  handleDefaultPresetRequest,
+  handlePresetRequest,
+} from './preset-route.js';
 import {
   getPreviewShellErrorStatusCode,
-  renderSuperPreviewHtml,
   sendSuperPreviewShellAsset,
 } from './preview-shell.js';
 import type { NextFunction, Request, Response } from 'express';
@@ -24,7 +26,11 @@ interface ServerGetRoute {
 export const get = [
   {
     url: `/${superPreviewRoutePrefix}`,
-    handle: renderPreview,
+    handle: handleDefaultPresetRequest,
+  },
+  {
+    url: /^\/super-preview\/preset-([a-z0-9][a-z0-9-]*)$/u,
+    handle: handlePresetRequest,
   },
   {
     url: `/${superPreviewRoutePrefix}/query-extname-map.json`,
@@ -35,24 +41,6 @@ export const get = [
     handle: sendShellAsset,
   },
 ] satisfies ServerGetRoute[];
-
-async function renderPreview(request: Request, response: Response) {
-  try {
-    const metadata = await createPreviewMetadata(request);
-    writeServerDiagnosticLog('info', 'preview-route-rendered', {
-      launchScene: metadata.launchScene,
-      requestUrl: request.originalUrl ?? request.url,
-      serverOrigin: metadata.serverOrigin,
-    });
-    response
-      .status(200)
-      .type('text/html; charset=utf-8')
-      .set('cache-control', 'no-store')
-      .send(renderSuperPreviewHtml(metadata));
-  } catch (error) {
-    handleServerError(request, response, error);
-  }
-}
 
 async function queryExtnameMap(request: Request, response: Response) {
   try {
@@ -90,7 +78,11 @@ function sendShellAsset(request: Request, response: Response) {
   }
 }
 
-function handleServerError(request: Request, response: Response, error: unknown) {
+function handleServerError(
+  request: Request,
+  response: Response,
+  error: unknown,
+) {
   logger.error('server request failed', error);
   writeServerDiagnosticLog('error', 'server-route-error', {
     error: formatErrorForDiagnosticLog(error),

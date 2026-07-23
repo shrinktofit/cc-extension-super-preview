@@ -1,6 +1,7 @@
 import { getBootConfig } from './config';
 import { installErrorHandlers } from './error-tools';
 import { PreviewShellUi } from './shell-ui';
+import { launchParams } from './super-preview-runtime';
 
 if (document.readyState === 'loading') {
   window.addEventListener('load', startBoot);
@@ -35,5 +36,5 @@ async function boot(ui: PreviewShellUi) {
   ui.reportBootStage('system:import-cc:done');
 
   const { bootEngineReady } = await import('./engine-ready');
-  await bootEngineReady(ui, config);
+  await bootEngineReady(ui, config, launchParams);
 }

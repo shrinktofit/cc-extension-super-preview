@@ -20,13 +20,13 @@
 <body>
   <div id="super-preview-shell"></div>
 
-  <script>
-    window.__SUPER_PREVIEW_BOOT_CONFIG__ = <%- bootConfigJson %>;
-  </script>
+  <script id="super-preview-config" type="application/json"><%- configJson %></script>
+  <script type="importmap"><%- runtimeImportMapJson %></script>
   <script src="<%= polyfillsUrl %>"></script>
   <script src="<%= engineImportMapUrl %>" type="systemjs-importmap"></script>
   <script src="<%= packImportMapUrl %>" type="systemjs-importmap"></script>
   <script src="<%= globalImportMapUrl %>" type="systemjs-importmap"></script>
+  <script type="systemjs-importmap"><%- runtimeSystemImportMapJson %></script>
   <script src="<%= systemJsUrl %>"></script>
   <script>
     System.setResolutionDetailMapCallback(function() {

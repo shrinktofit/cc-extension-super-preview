@@ -1,6 +1,6 @@
 {
   "name": "@bsgames/cc-extension-super-preview-preview-shell",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1",
   "type": "module",
   "files": [
     "lib"
@@ -19,12 +19,10 @@
     "@bsgames/cc-extension-super-preview-workflow": "workspace:*",
     "@cocos/creator-types": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "pretty-format": "^30.3.0",
     "typescript": "catalog:",
     "vite": "catalog:",
+    "vue": "catalog:",
     "vue-tsc": "catalog:"
-  },
-  "dependencies": {
-    "pretty-format": "^30.3.0",
-    "vue": "catalog:"
   }
 }

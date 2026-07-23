@@ -4,6 +4,7 @@ import {
 } from 'node:path';
 import { URL } from 'node:url';
 import { superPreviewRoutePrefix } from '../../constants.js';
+import type { LaunchParams } from '../../launch-params.js';
 import { logger } from '../../logger.js';
 import { writeServerDiagnosticLog } from './diagnostic-log.js';
 import type { Request } from 'express';
@@ -14,6 +15,7 @@ export interface PreviewMetadata {
   engineBundleUrl: string;
   engineImportMapUrl: string;
   globalImportMapUrl: string;
+  launchParams: LaunchParams;
   launchScene: string;
   packImportMapUrl: string;
   packResolutionDetailMapUrl: string;
@@ -34,10 +36,13 @@ interface PreviewServerResources {
   settingsJsPath: string;
 }
 
-export async function createPreviewMetadata(request: Request): Promise<PreviewMetadata> {
+export async function createPreviewMetadata(
+  request: Request,
+  launchParams: LaunchParams,
+): Promise<PreviewMetadata> {
   const serverOrigin = inferServerOrigin(request);
-  const launchScene = await resolveLaunchScene(request);
-  const splashPreview = getRequestSearchParam(request, 'splashPreview') === 'true';
+  const launchScene = await resolveLaunchScene(launchParams);
+  const splashPreview = launchParams.splashPreview === 'true';
   const resources = await resolvePreviewServerResources(launchScene, splashPreview);
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
 
@@ -59,6 +64,7 @@ export async function createPreviewMetadata(request: Request): Promise<PreviewMe
     engineBundleUrl: toServerUrl(resources.engineBundlePath, serverOrigin),
     engineImportMapUrl: toServerUrl(resources.engineImportMapPath, serverOrigin),
     globalImportMapUrl: toServerUrl(resources.globalImportMapPath, serverOrigin),
+    launchParams,
     launchScene,
     packImportMapUrl: toServerUrl(resources.packImportMapPath, serverOrigin),
     packResolutionDetailMapUrl: toServerUrl(resources.packResolutionDetailMapPath, serverOrigin),
@@ -71,8 +77,8 @@ export async function createPreviewMetadata(request: Request): Promise<PreviewMe
   };
 }
 
-async function resolveLaunchScene(request: Request) {
-  const requestedScene = getRequestSearchParam(request, 'scene')?.trim();
+async function resolveLaunchScene(launchParams: LaunchParams) {
+  const requestedScene = launchParams.scene?.trim();
   const configuredScene = requestedScene
     ? undefined
     : await Editor.Profile.getConfig('preview', 'general.start_scene');
@@ -147,27 +153,6 @@ function inferServerOrigin(request: Request) {
   return `${protocol.replace(/:$/u, '')}://${host}`.replace(/\/+$/u, '');
 }
 
-function getRequestSearchParam(request: Request, name: string) {
-  const queryValue = firstQueryStringValue(request.query?.[name]);
-  if (queryValue !== undefined) {
-    return queryValue;
-  }
-
-  const rawUrl = request.originalUrl ?? request.url;
-  if (!rawUrl) {
-    return undefined;
-  }
-
-  return new URL(rawUrl, 'http://super-preview.local').searchParams.get(name) ?? undefined;
-}
-
-function firstQueryStringValue(value: unknown) {
-  const normalizedValue = Array.isArray(value) ? value[0] : value;
-  return typeof normalizedValue === 'string'
-    ? normalizedValue
-    : undefined;
-}
-
 function firstHeaderValue(request: Request, name: string): string | undefined {
   const value = request.header?.(name)
     ?? request.get?.(name)
@@ -176,6 +161,11 @@ function firstHeaderValue(request: Request, name: string): string | undefined {
 
   const normalized = Array.isArray(value) ? value[0] : value;
   return normalized?.split(',', 1)[0]?.trim() || undefined;
+}
+
+export function createPreviewRequestUrl(request: Request) {
+  const serverOrigin = inferServerOrigin(request);
+  return new URL(request.originalUrl ?? request.url, `${serverOrigin}/`);
 }
 
 function toServerUrl(value: string, serverOrigin: string) {

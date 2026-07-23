@@ -15,7 +15,7 @@
     "registry": "http://exm.bluesquall.local/",
     "registryPackageName": "@bsgames/extension-super-preview"
   },
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "package_version": 2,
@@ -38,6 +38,12 @@
       }
     ],
     "messages": {
+      "evaluate-preset-launch-params": {
+        "methods": [
+          "evaluate-preset-launch-params"
+        ],
+        "public": false
+      },
       "open": {
         "methods": [
           "open"
@@ -71,6 +77,7 @@
   },
   "dependencies": {
     "@bsgames/cc-extension-super-preview-preview-shell": "workspace:*",
-    "ejs": "catalog:"
+    "ejs": "catalog:",
+    "zod": "^4.4.3"
   }
 }

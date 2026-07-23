@@ -1,3 +1,5 @@
+import { launchParams } from './super-preview-runtime';
+
 let superPreviewDebugLogging: boolean | undefined;
 
 export function logSuperPreviewDebug(message: string, ...args: unknown[]) {
@@ -11,8 +13,7 @@ export function logSuperPreviewDebug(message: string, ...args: unknown[]) {
 export function isSuperPreviewDebugLoggingEnabled() {
   superPreviewDebugLogging ??= (() => {
     try {
-      const searchParams = new URLSearchParams(window.location.search);
-      return searchParams.has('superPreviewDebug')
+      return Object.hasOwn(launchParams, 'superPreviewDebug')
         || window.localStorage?.getItem('super-preview.debug') === '1';
     } catch {
       return false;

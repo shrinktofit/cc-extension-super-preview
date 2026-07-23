@@ -23,13 +23,16 @@ export default defineConfig({
     cssCodeSplit: false,
     lib: {
       entry: {
-        boot: 'src/boot.ts',
+        'assets/boot': 'src/boot.ts',
+        'assets/runtime': 'src/runtime.ts',
       },
       formats: ['es'],
-      fileName: (_format, entryName) => `assets/${entryName}.js`,
       cssFileName: 'style',
     },
     rollupOptions: {
+      external: [
+        'super-preview',
+      ],
       output: {
         assetFileNames: 'assets/[name][extname]',
         chunkFileNames: 'assets/[name].js',
