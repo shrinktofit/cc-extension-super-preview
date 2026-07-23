@@ -1,7 +1,7 @@
 # Super Preview
 
 Super Preview adds a focused browser preview shell alongside the preview bundled
-with Cocos Creator and Vortex. The built-in preview remains available as a
+with Cocos Creator. The built-in preview remains available as a
 fallback, while Super Preview provides clearer loading and error feedback.
 
 The extension reuses the editor's preview server, generated settings, engine
@@ -84,7 +84,7 @@ values, so `/super-preview/preset-example?scene=other-scene` remains available
 for one-off overrides.
 
 If a preset module fails while it is being evaluated, Super Preview asks the
-Vortex module loader to clear the declared entry. Dependency cache behavior is
+editor module loader to clear the declared entry. Dependency cache behavior is
 owned by that loader; restart the editor after changing dependencies if stale
 code remains.
 
