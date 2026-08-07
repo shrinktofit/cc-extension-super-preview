@@ -9,7 +9,7 @@ type SceneJson = Record<string, unknown> & {
 
 export async function startLaunchScene(
   launchScene: string,
-  serverOrigin: string,
+  sceneBaseUrl: string,
   ui: PreviewShellUi,
 ) {
   ui.reportBootStage(`scene:start:${launchScene}`);
@@ -17,7 +17,7 @@ export async function startLaunchScene(
   game.pause();
 
   ui.reportBootStage(`scene:fetch-json:${launchScene}`);
-  const sceneJson = await fetchSceneJson(launchScene, serverOrigin);
+  const sceneJson = await fetchSceneJson(launchScene, sceneBaseUrl);
   const serializedAssetId = sceneJson[1]?._id;
   const assetId = typeof serializedAssetId === 'string'
     ? serializedAssetId
@@ -68,10 +68,11 @@ export async function startLaunchScene(
   });
 }
 
-async function fetchSceneJson(launchScene: string, serverOrigin: string) {
+async function fetchSceneJson(launchScene: string, sceneBaseUrl: string) {
+  // Keep a trailing slash so URL treats the scene base as a directory.
   const sceneJsonUrl = new URL(
-    `/scene/${encodeURIComponent(launchScene)}.json`,
-    serverOrigin,
+    `${encodeURIComponent(launchScene)}.json`,
+    `${sceneBaseUrl.replace(/\/+$/u, '')}/`,
   ).href;
   const response = await fetch(sceneJsonUrl, { cache: 'no-store' });
   if (!response.ok) {

@@ -8,6 +8,16 @@ export interface CCPreviewSettings extends Record<string, unknown> {
   assets?: Record<string, unknown>;
   launch?: Record<string, unknown> & { launchScene?: string };
   path?: Record<string, unknown>;
+  preview?: Record<string, unknown> & {
+    resourceUrls?: {
+      importBase?: string;
+      nativeBase?: string;
+      remoteBundles?: readonly string[];
+      sceneBase?: string;
+      server?: string;
+      subpackages?: readonly string[];
+    };
+  };
   profiling?: Record<string, unknown>;
   rendering?: Record<string, unknown> & { effectSettingsPath?: string };
   screen?: Record<string, unknown>;
@@ -22,10 +32,17 @@ export async function bootEngineReady(
 ) {
   installGameInitStageLogger(ui);
 
-  const settings = window._CCSettings ?? {};
+  const settings = window._CCSettings;
+  if (!settings) {
+    throw new Error('[Super Preview] Preview settings were not loaded');
+  }
   const launchSettings = { ...(settings.launch ?? {}) };
   const launchScene = launchSettings.launchScene
     ?? 'current_scene';
+  const sceneBaseUrl = new URL(
+    settings.preview?.resourceUrls?.sceneBase ?? '/scene',
+    `${config.serverOrigin}/`,
+  ).href.replace(/\/+$/u, '');
   const overrideSettings = createOverrideSettings(settings, launchSettings, config);
 
   console.info('[Super Preview] Effective preview settings', {
@@ -52,7 +69,7 @@ export async function bootEngineReady(
   ui.reportBootStage('game:run');
   game.run(() => {
     ui.reportBootStage('game:run:onStart');
-    startLaunchScene(launchScene, config.serverOrigin, ui)
+    startLaunchScene(launchScene, sceneBaseUrl, ui)
       .catch((error: unknown) => ui.showError(error));
   });
 }
@@ -82,6 +99,7 @@ function createOverrideSettings(
   launchSettings: CCPreviewSettings['launch'],
   config: SuperPreviewBootConfig,
 ): CCOverrideSettings {
+  const resourceUrls = settings.preview?.resourceUrls;
   const effectSettingsPath = settings.rendering?.effectSettingsPath;
   const absoluteEffectSettingsPath = effectSettingsPath
     && (/^[a-z][a-z0-9+.-]*:/iu.test(effectSettingsPath) || effectSettingsPath.startsWith('//'));
@@ -97,10 +115,11 @@ function createOverrideSettings(
     ...settings,
     assets: {
       ...(settings.assets ?? {}),
-      importBase: config.assetsImportBaseUrl,
-      nativeBase: config.assetsNativeBaseUrl,
-      remoteBundles: [],
-      subpackages: [],
+      importBase: resourceUrls?.importBase ?? config.assetsImportBaseUrl,
+      nativeBase: resourceUrls?.nativeBase ?? config.assetsNativeBaseUrl,
+      remoteBundles: [...(resourceUrls?.remoteBundles ?? [])],
+      subpackages: [...(resourceUrls?.subpackages ?? [])],
+      ...(resourceUrls?.server === undefined ? {} : { server: resourceUrls.server }),
     },
     launch: {
       ...(launchSettings ?? {}),
