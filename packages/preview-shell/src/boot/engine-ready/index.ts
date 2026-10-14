@@ -1,6 +1,6 @@
 import { DebugMode, Game, game } from 'cc';
 import type { PreviewShellUi } from '../shell-ui';
-import type { SuperPreviewBootConfig } from '../config';
+import type { SuperPreviewBootConfig, SuperPreviewOptions } from '../../config';
 import { installQueryExtnamePipe } from './query-extname';
 import { startLaunchScene } from './scene';
 
@@ -28,7 +28,7 @@ type CCOverrideSettings = import('cc').IGameConfig['overrideSettings'] & CCPrevi
 export async function bootEngineReady(
   ui: PreviewShellUi,
   config: SuperPreviewBootConfig,
-  launchParams: Readonly<Record<string, string>>,
+  previewOptions: Pick<SuperPreviewOptions, 'debug'>,
 ) {
   installGameInitStageLogger(ui);
 
@@ -60,7 +60,7 @@ export async function bootEngineReady(
 
   ui.reportBootStage('game:init');
   await game.init({
-    debugMode: launchParams.debug === 'false' ? DebugMode.NONE : DebugMode.INFO,
+    debugMode: previewOptions.debug ? DebugMode.INFO : DebugMode.NONE,
     overrideSettings,
   });
 

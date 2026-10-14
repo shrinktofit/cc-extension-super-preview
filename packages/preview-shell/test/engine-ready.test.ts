@@ -68,7 +68,7 @@ describe('Preview Shell scene selection', () => {
     });
   });
 
-  it('launches the scene selected by preview settings instead of launch params', async () => {
+  it('launches the scene selected by preview settings', async () => {
     vi.stubGlobal('window', {
       _CCSettings: {
         launch: {
@@ -77,9 +77,7 @@ describe('Preview Shell scene selection', () => {
       },
     });
 
-    await bootEngineReady(ui, config, {
-      scene: 'game-scene-param',
-    });
+    await bootEngineReady(ui, config, { debug: true });
 
     expect(mocks.startLaunchScene).toHaveBeenCalledWith(
       'settings-scene',
@@ -93,9 +91,7 @@ describe('Preview Shell scene selection', () => {
       _CCSettings: {},
     });
 
-    await bootEngineReady(ui, config, {
-      scene: 'game-scene-param',
-    });
+    await bootEngineReady(ui, config, { debug: true });
 
     expect(mocks.startLaunchScene).toHaveBeenCalledWith(
       'current_scene',
@@ -126,7 +122,7 @@ describe('Preview Shell scene selection', () => {
       },
     });
 
-    await bootEngineReady(ui, config, {});
+    await bootEngineReady(ui, config, { debug: true });
 
     expect(mocks.gameInit).toHaveBeenCalledWith({
       debugMode: 1,
@@ -155,7 +151,7 @@ describe('Preview Shell scene selection', () => {
     /// Boot fails explicitly without initializing the engine or loading full resources.
     vi.stubGlobal('window', {});
 
-    await expect(bootEngineReady(ui, config, {})).rejects.toThrow(
+    await expect(bootEngineReady(ui, config, { debug: true })).rejects.toThrow(
       '[Super Preview] Preview settings were not loaded',
     );
     expect(mocks.gameInit).not.toHaveBeenCalled();

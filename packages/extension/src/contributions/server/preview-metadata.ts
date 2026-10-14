@@ -4,7 +4,7 @@ import {
 } from 'node:path';
 import { URL } from 'node:url';
 import { superPreviewRoutePrefix } from '../../constants.js';
-import type { LaunchParams } from '../../launch-params.js';
+import type { LaunchParams, PreviewOptions } from '../../launch-params.js';
 import { logger } from '../../logger.js';
 import { writeServerDiagnosticLog } from './diagnostic-log.js';
 import type { Request } from 'express';
@@ -21,6 +21,7 @@ export interface PreviewMetadata {
   packResolutionDetailMapUrl: string;
   polyfillsUrl: string;
   previewServerUrl: string;
+  previewOptions: Readonly<PreviewOptions>;
   routePrefix: string;
   serverOrigin: string;
   settingsJsUrl: string;
@@ -40,13 +41,12 @@ export async function createPreviewMetadata(
   request: Request,
   requestedScene: string | undefined,
   launchParams: LaunchParams,
+  previewOptions: Readonly<PreviewOptions>,
 ): Promise<PreviewMetadata> {
   const serverOrigin = inferServerOrigin(request);
-  const launchScene = await resolveLaunchScene(requestedScene);
-  const splashPreview = createPreviewRequestUrl(request)
-    .searchParams
-    .get('splashPreview') === 'true';
-  const resources = await resolvePreviewServerResources(launchScene, splashPreview);
+  const launchScene = await selectLaunchScene(requestedScene);
+  const { splashPreview } = previewOptions;
+  const resources = await queryPreviewServerResources(launchScene, splashPreview);
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
 
   logger.debug(
@@ -73,6 +73,7 @@ export async function createPreviewMetadata(
     packResolutionDetailMapUrl: toServerUrl(resources.packResolutionDetailMapPath, serverOrigin),
     polyfillsUrl: `${serverOrigin}/scripting/polyfills/bundle.js`,
     previewServerUrl,
+    previewOptions,
     routePrefix: superPreviewRoutePrefix,
     serverOrigin,
     settingsJsUrl: toServerUrl(resources.settingsJsPath, serverOrigin),
@@ -80,7 +81,7 @@ export async function createPreviewMetadata(
   };
 }
 
-async function resolveLaunchScene(scene: string | undefined) {
+async function selectLaunchScene(scene: string | undefined) {
   const requestedScene = scene?.trim();
   const configuredScene = requestedScene
     ? undefined
@@ -90,7 +91,7 @@ async function resolveLaunchScene(scene: string | undefined) {
     || 'current_scene';
 }
 
-async function resolvePreviewServerResources(
+async function queryPreviewServerResources(
   launchScene: string,
   splashPreview: boolean,
 ): Promise<PreviewServerResources> {

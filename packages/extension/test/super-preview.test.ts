@@ -89,6 +89,102 @@ describe('Super Preview extension surfaces', () => {
     }
   });
 
+  it('separates preview options from same-named business parameters', async () => {
+    /// @case
+    /// 1. A URL supplies preview options and business parameters with matching names.
+    /// 2. Business parameters include empty values and repeated keys.
+    /// @expect
+    /// Only prefixed options control preview; business strings pass through with the last value winning.
+    const { response, state } = createResponse();
+    await invokeStringRoute('/super-preview', createRequest(
+      '/super-preview?--scene=preview-scene&scene=lobby&--splashPreview=false&splashPreview=true&--debug=false&debug=true&--superPreviewDebug=false&superPreviewDebug=true&serverPort=12180&serverPort=12500&empty=',
+    ), response);
+
+    expect(state.statusCode).toBe(200);
+    expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=preview-scene'));
+    expect(state.body).not.toEqual(expect.stringContaining('splashPreview=true'));
+    const config = readEmbeddedConfig(String(state.body));
+    expect(config.previewOptions).toEqual({
+      scene: 'preview-scene',
+      splashPreview: false,
+      debug: false,
+      superPreviewDebug: false,
+    });
+    expect(config.launchParams).toEqual({
+      scene: 'lobby',
+      splashPreview: 'true',
+      debug: 'true',
+      superPreviewDebug: 'true',
+      serverPort: '12500',
+      empty: '',
+    });
+  });
+
+  it.each(['--unknown=true', '--=value', '--debug=', '--debug=1', '--splashPreview=yes', '--superPreviewDebug=False', '--debug=bad&--debug=true'])(
+    'rejects invalid preview option %s as a client error before evaluating a preset',
+    async (query) => {
+      /// @case
+      /// 1. A preset URL supplies an unknown option or a boolean other than true/false.
+      /// @expect
+      /// The response is a clear, uncached 400 error and the preset is not evaluated.
+      const { response, state } = createResponse();
+      await invokePresetRoute(createRequest(`/super-preview/preset-example?${query}`), response);
+      expect(state.statusCode).toBe(400);
+      expect(state.contentType).toBe('text/plain; charset=utf-8');
+      expect(state.headers['cache-control']).toBe('no-store');
+      expect(state.body).toEqual(expect.stringContaining('Super Preview URL parameter'));
+      expect(messageRequest).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses the last preview option value and keeps business control names inert', async () => {
+    /// @case
+    /// 1. Preview options repeat and include explicit true and false values.
+    /// 2. A second URL only supplies business control names.
+    /// @expect
+    /// The last valid option wins; business names leave the preview defaults and editor scene intact.
+    const repeated = createResponse();
+    await invokeStringRoute('/super-preview', createRequest(
+      '/super-preview?--scene=first&--scene=last&--debug=false&--debug=true&--splashPreview=true&--splashPreview=false&--superPreviewDebug=false&--superPreviewDebug=true',
+    ), repeated.response);
+    expect(repeated.state.statusCode).toBe(200);
+    expect(readEmbeddedConfig(String(repeated.state.body)).previewOptions).toEqual({
+      scene: 'last', debug: true, splashPreview: false, superPreviewDebug: true,
+    });
+
+    profileGetConfig.mockResolvedValue('profile-scene');
+    const business = createResponse();
+    await invokeStringRoute('/super-preview', createRequest(
+      '/super-preview?scene=lobby&debug=false&superPreviewDebug=true&splashPreview=true',
+    ), business.response);
+    expect(business.state.body).toEqual(expect.stringContaining('/settings.js?scene=profile-scene'));
+    expect(readEmbeddedConfig(String(business.state.body)).previewOptions).toEqual({
+      debug: true, splashPreview: false,
+    });
+  });
+
+  it.each(['', '%20%20'])('falls back from an empty preview scene %s through preset, profile and current scene', async (scene) => {
+    /// @case
+    /// 1. A URL has an empty or whitespace scene option beside a business scene.
+    /// 2. Preset and editor scene defaults become available in turn.
+    /// @expect
+    /// Empty preview selection uses preset, then profile, then current_scene, without consuming the business scene.
+    moduleRequireFile.mockReturnValue(() => ({ scene: 'preset-scene', launchParams: { scene: 'preset-business' } }));
+    enablePreset('empty-scene-preset', { id: 'example', module: './dist/example.cjs' });
+    profileGetConfig.mockResolvedValue('profile-scene');
+    const preset = createResponse();
+    await invokePresetRoute(createRequest(`/super-preview/preset-example?--scene=${scene}&scene=lobby`), preset.response);
+    expect(preset.state.body).toEqual(expect.stringContaining('/settings.js?scene=preset-scene'));
+    expect(readEmbeddedConfig(String(preset.state.body)).launchParams).toEqual({ scene: 'lobby' });
+
+    for (const [profile, expected] of [['profile-scene', 'profile-scene'], ['', 'current_scene']]) {
+      profileGetConfig.mockResolvedValue(profile);
+      const normal = createResponse();
+      await invokeStringRoute('/super-preview', createRequest(`/super-preview?--scene=${scene}&scene=lobby`), normal.response);
+      expect(normal.state.body).toEqual(expect.stringContaining(`/settings.js?scene=${expected}`));
+    }
+  });
+
   it('keeps the built-in root route available and renders only the stable route', async () => {
     /// @case
     /// 1. The built-in preview server owns the root route.
@@ -101,7 +197,7 @@ describe('Super Preview extension surfaces', () => {
     await invokeStringRoute(
       '/super-preview',
       createRequest(
-        '/super-preview?scene=request-scene-uuid&splashPreview=true&ignored=value&--debugMode=true',
+        '/super-preview?--scene=request-scene-uuid&--splashPreview=true&ignored=value&debugMode=true',
       ),
       response,
     );
@@ -122,11 +218,12 @@ describe('Super Preview extension surfaces', () => {
         serverOrigin: 'https://preview.test',
       },
       launchParams: {
+        ignored: 'value',
         debugMode: 'true',
       },
     });
     expect(config.launchParams).not.toHaveProperty('scene');
-    expect(config.launchParams).not.toHaveProperty('ignored');
+    expect(config.launchParams).not.toHaveProperty('--scene');
     expect(config.launchParams).not.toHaveProperty('splashPreview');
     expect(moduleRequireFile).not.toHaveBeenCalled();
     expect(messageSend).not.toHaveBeenCalledWith('preview', 'ready');
@@ -141,7 +238,7 @@ describe('Super Preview extension surfaces', () => {
     const normalResponse = createResponse();
     await invokeStringRoute(
       '/super-preview',
-      createRequest('/super-preview?scene=request-scene-uuid'),
+      createRequest('/super-preview?--scene=request-scene-uuid'),
       normalResponse.response,
     );
     expect(normalResponse.state.body).toEqual(
@@ -152,7 +249,7 @@ describe('Super Preview extension surfaces', () => {
     const splashResponse = createResponse();
     await invokeStringRoute(
       '/super-preview',
-      createRequest('/super-preview?scene=request-scene-uuid&splashPreview=true'),
+      createRequest('/super-preview?--scene=request-scene-uuid&--splashPreview=true'),
       splashResponse.response,
     );
     expect(splashResponse.state.body).toEqual(expect.stringContaining('splashPreview=true'));
@@ -215,7 +312,7 @@ describe('Super Preview extension surfaces', () => {
     const selectedResponse = createResponse();
     await invokeStringRoute(
       '/super-preview',
-      createRequest('/super-preview?scene=selected-scene-uuid'),
+      createRequest('/super-preview?--scene=selected-scene-uuid'),
       selectedResponse.response,
     );
     expect(selectedResponse.state.body).toEqual(
@@ -239,7 +336,7 @@ describe('Super Preview extension surfaces', () => {
     const createPreset = vi.fn(async () => ({
       scene: 'preset-scene-uuid',
       launchParams: {
-        fullFlow: '',
+        fullFlow: 'preset-value',
         scene: 'game-scene-param',
         serverPort: '12180',
       },
@@ -253,7 +350,7 @@ describe('Super Preview extension surfaces', () => {
 
     const presetSceneResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-example?serverPort=12500&--serverPort=12600'),
+      createRequest('/super-preview/preset-example?serverPort=12500'),
       presetSceneResponse.response,
     );
     expect(presetSceneResponse.state.statusCode).toBe(200);
@@ -262,14 +359,14 @@ describe('Super Preview extension surfaces', () => {
     );
     expect(readEmbeddedConfig(String(presetSceneResponse.state.body)).launchParams)
       .toEqual({
-        fullFlow: '',
+        fullFlow: 'preset-value',
         scene: 'game-scene-param',
-        serverPort: '12600',
+        serverPort: '12500',
       });
 
     await invokePresetRoute(
       createRequest(
-        '/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
+        '/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       ),
       response,
     );
@@ -280,7 +377,7 @@ describe('Super Preview extension surfaces', () => {
     expect(createPreset).toHaveBeenCalledWith({
       projectPath: '',
       requestUrl: new URL(
-        'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
+        'https://preview.test/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       ),
     });
     expect(messageRequest).toHaveBeenCalledWith(
@@ -289,7 +386,7 @@ describe('Super Preview extension surfaces', () => {
       {
         presetId: 'example',
         requestUrl:
-          'https://preview.test/super-preview/preset-example?scene=query-scene-uuid&--scene=query-game-scene-param&serverPort=13000&--serverPort=13500',
+          'https://preview.test/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       },
     );
     const html = String(state.body);
@@ -665,37 +762,26 @@ describe('Super Preview extension surfaces', () => {
     unload();
   });
 
-  it('emits native and SystemJS runtime loading branches without a static bare import', async () => {
+  it('serves both runtime modules referenced by the generated import maps', async () => {
     /// @case
-    /// 1. The published Preview Shell boot entry and its imported chunk are inspected.
-    /// 2. The page has emitted native and SystemJS import maps for the same runtime module.
+    /// 1. The user loads a preview page and follows each super-preview import map entry.
     /// @expect
-    /// The build artifact contains both dynamic loading branches and no static bare runtime import; browser behavior is covered by runtime smoke tests.
-    const entryResponse = createResponse();
-    await invokeAssetRoute(
-      createRequest('/super-preview/assets/boot.js', {}, ['assets/boot.js']),
-      entryResponse.response,
-    );
-    const entrySource = readResponseBuffer(entryResponse.state.body);
-    const chunkName = entrySource.match(/import\s+"\.\/([^"]+)"/u)?.[1];
-    expect(chunkName).toBeTruthy();
-
-    const chunkResponse = createResponse();
-    await invokeAssetRoute(
-      createRequest(
-        `/super-preview/assets/${chunkName}`,
-        {},
-        [`assets/${chunkName}`],
-      ),
-      chunkResponse.response,
-    );
-    const bootSource = `${entrySource}\n${readResponseBuffer(chunkResponse.state.body)}`;
-
-    expect(bootSource).not.toMatch(/\bfrom\s+["']super-preview["']/u);
-    expect(bootSource).toMatch(/HTMLScriptElement\.supports\?\.\(["']importmap["']\)/u);
-    expect(bootSource).toMatch(/\bimport\(["']super-preview["']\)/u);
-    expect(bootSource).toMatch(/globalThis\.System/u);
-    expect(bootSource).toMatch(/\.import\(["']super-preview["']\)/u);
+    /// Both native ESM and SystemJS runtime URLs return JavaScript assets with no cache.
+    const page = createResponse();
+    await invokeStringRoute('/super-preview', createRequest('/super-preview?scene=lobby'), page.response);
+    const html = String(page.state.body);
+    for (const type of ['importmap', 'systemjs-importmap']) {
+      const importMap = readInlineImportMap(html, type, 'super-preview');
+      const url = new URL(importMap.imports['super-preview']);
+      const asset = createResponse();
+      await invokeAssetRoute(createRequest(
+        `${url.pathname}${url.search}`, {}, [url.pathname.slice('/super-preview/'.length)],
+      ), asset.response);
+      expect(asset.state.statusCode).toBe(200);
+      expect(asset.state.contentType).toBe('application/javascript; charset=utf-8');
+      expect(asset.state.headers['cache-control']).toBe('no-store');
+      expect(Buffer.isBuffer(asset.state.body)).toBe(true);
+    }
   });
 });
 
@@ -924,14 +1010,8 @@ function readEmbeddedConfig(html: string) {
   return JSON.parse(script[1]) as {
     boot: Record<string, string>;
     launchParams: Record<string, string>;
+    previewOptions: Record<string, string | boolean>;
   };
-}
-
-function readResponseBuffer(body: unknown) {
-  if (!Buffer.isBuffer(body)) {
-    throw new Error('Expected a binary server response');
-  }
-  return body.toString('utf8');
 }
 
 function createRequest(path: string, query: Record<string, string> = {}, params: string[] = []) {

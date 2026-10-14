@@ -25,6 +25,7 @@ interface BootConfig {
 interface SuperPreviewConfig {
   boot: BootConfig;
   launchParams: PreviewMetadata['launchParams'];
+  previewOptions: PreviewMetadata['previewOptions'];
 }
 
 interface PreviewShellTemplateLocals {
@@ -67,6 +68,7 @@ export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
   const config: SuperPreviewConfig = {
     boot: createBootConfig(metadata),
     launchParams: metadata.launchParams,
+    previewOptions: metadata.previewOptions,
   };
   const locals: PreviewShellTemplateLocals = {
     baseHref: `${metadata.serverOrigin}/`,

@@ -6,9 +6,17 @@ export interface SuperPreviewBootConfig {
   serverOrigin: string;
 }
 
+export interface SuperPreviewOptions {
+  debug: boolean;
+  scene?: string;
+  splashPreview: boolean;
+  superPreviewDebug?: boolean;
+}
+
 interface SuperPreviewConfig {
   boot: SuperPreviewBootConfig;
   launchParams: Readonly<Record<string, string>>;
+  previewOptions: Readonly<SuperPreviewOptions>;
 }
 
 let config: SuperPreviewConfig | undefined;

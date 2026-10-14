@@ -1,6 +1,7 @@
 import {
   mergeLaunchParams,
-  readUrlLaunchParams,
+  parsePreviewRequestParams,
+  PreviewParameterError,
   type LaunchParams,
 } from '../../launch-params.js';
 import { logger } from '../../logger.js';
@@ -47,6 +48,7 @@ async function renderPreset(
   const requestUrl = createPreviewRequestUrl(request);
 
   try {
+    const { launchParams: urlLaunchParams, previewOptions } = parsePreviewRequestParams(requestUrl);
     let preset = builtInPreset;
     if (presetId) {
       const result = await Editor.Message.request(
@@ -79,12 +81,10 @@ async function renderPreset(
     }
     const launchParams = mergeLaunchParams(
       preset.launchParams,
-      readUrlLaunchParams(requestUrl),
+      urlLaunchParams,
     );
-    const scene = requestUrl.searchParams.has('scene')
-      ? requestUrl.searchParams.get('scene') ?? undefined
-      : preset.scene;
-    const metadata = await createPreviewMetadata(request, scene, launchParams);
+    const scene = previewOptions.scene ?? preset.scene;
+    const metadata = await createPreviewMetadata(request, scene, launchParams, previewOptions);
     writeServerDiagnosticLog('info', 'preset-route-rendered', {
       launchScene: metadata.launchScene,
       packageProjectPath: Editor.Project.path,
@@ -98,7 +98,7 @@ async function renderPreset(
       .set('cache-control', 'no-store')
       .send(renderSuperPreviewHtml(metadata));
   } catch (error) {
-    handlePresetError(request, response, error, 500);
+    handlePresetError(request, response, error, error instanceof PreviewParameterError ? 400 : 500);
   }
 }
 
