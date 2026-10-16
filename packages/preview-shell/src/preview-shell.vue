@@ -79,12 +79,27 @@ defineExpose({
 html,
 body {
   width: 100%;
-  height: 100%;
+  /*
+   * Tested on iPhone 13 Pro / iOS 26.2.1, in a home-screen PWA with
+   * viewport-fit=cover and black-translucent: 100% follows the initial
+   * 797px layout height, and 100dvh also stays at 797px on cold start.
+   * 100vh uses the full 844px viewport height, expanding the root so
+   * the viewport and Cocos canvas can fill the screen.
+   */
+  height: 100vh;
   margin: 0;
   overflow: hidden;
-  background: #111;
   color: #f7f7f7;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+html {
+  /*
+   * Make the 100vh root the containing block for the absolute preview shell.
+   * On iPhone 13 Pro / iOS 26.2.1, removing this leaves the shell and #content
+   * at 797px even though the root is 844px and the engine sizes the canvas to 844px.
+   */
+  position: relative;
 }
 
 #super-preview-shell,

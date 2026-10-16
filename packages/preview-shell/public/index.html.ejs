@@ -4,8 +4,14 @@
   <meta charset="utf-8">
   <title>Super Preview</title>
   <base href="<%= baseHref %>">
-  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true">
+  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true,viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <!--
+    iOS compatibility: let Home Screen web apps extend beneath the status bar.
+    Manifest display: fullscreen is not a reliable replacement on iOS:
+    https://bugs.webkit.org/show_bug.cgi?id=264220
+  -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="full-screen" content="yes">
   <meta name="x5-fullscreen" content="true">
