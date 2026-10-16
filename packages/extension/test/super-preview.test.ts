@@ -58,6 +58,7 @@ vi.stubGlobal('Editor', {
     getConfig: profileGetConfig,
   },
   Project: {
+    name: 'Test Game',
     path: '',
   },
 });
@@ -80,6 +81,7 @@ describe('Super Preview extension surfaces', () => {
     moduleRemoveCache.mockReset();
     moduleRequireFile.mockReset();
     profileGetConfig.mockReset();
+    Reflect.set(Editor.Project, 'name', 'Test Game');
     installDefaultEditorResponses();
   });
 
@@ -101,8 +103,9 @@ describe('Super Preview extension surfaces', () => {
     ), response);
 
     expect(state.statusCode).toBe(200);
-    expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=preview-scene'));
-    expect(state.body).not.toEqual(expect.stringContaining('splashPreview=true'));
+    expect(state.body).toEqual(expect.stringContaining(
+      '<script name="setting" src="https://preview.test/settings.js?scene=preview-scene"></script>',
+    ));
     const config = readEmbeddedConfig(String(state.body));
     expect(config.previewOptions).toEqual({
       scene: 'preview-scene',
@@ -204,7 +207,7 @@ describe('Super Preview extension surfaces', () => {
 
     expect(state.statusCode).toBe(200);
     expect(state.contentType).toBe('text/html; charset=utf-8');
-    expect(state.body).toEqual(expect.stringContaining('<title>Super Preview</title>'));
+    expect(state.body).toEqual(expect.stringContaining('<title>Test Game</title>'));
     expect(state.body).toEqual(expect.stringContaining('id="super-preview-shell"'));
     expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=request-scene-uuid'));
     expect(state.body).toEqual(expect.stringContaining('splashPreview=true'));
@@ -227,6 +230,59 @@ describe('Super Preview extension surfaces', () => {
     expect(config.launchParams).not.toHaveProperty('splashPreview');
     expect(moduleRequireFile).not.toHaveBeenCalled();
     expect(messageSend).not.toHaveBeenCalledWith('preview', 'ready');
+  });
+
+  it.each(['/super-preview', '/super-preview/preset-example'])(
+    'renders a fullscreen web app manifest for %s without changing launch parameters',
+    async (previewPath) => {
+      /// @case
+      /// 1. A normal or preset preview URL contains internal options, repeated business keys and encoded values.
+      /// 2. The browser follows the manifest link rendered in the preview HTML.
+      /// @expect
+      /// The uncached manifest requests fullscreen, uses the editor project name and preserves the original start URL.
+      /// The HTML retains the iOS status-bar compatibility tag, and fetching the manifest does not evaluate a preset or boot settings.
+      moduleRequireFile.mockReturnValue(() => ({ launchParams: {} }));
+      enablePreset('manifest-preset', { id: 'example', module: './dist/example.cjs' });
+      const query = '?--scene=preview-scene&--debug=false&fullFlow=true&tag=a%26b&repeat=first&repeat=last&empty=';
+      const page = createResponse();
+      await invokeStringRoute(previewPath, createRequest(`${previewPath}${query}`), page.response);
+      expect(page.state.statusCode).toBe(200);
+      const html = String(page.state.body);
+      expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
+      const manifestHref = html.match(/<link rel="manifest" href="([^"]+)">/u)?.[1].replaceAll('&amp;', '&');
+      expect(manifestHref).toBe(`https://preview.test${previewPath}/manifest.webmanifest${query}`);
+      const manifestUrl = new URL(manifestHref!);
+      messageRequest.mockClear();
+      profileGetConfig.mockClear();
+      const manifest = createResponse();
+      await invokeStringRoute(manifestUrl.pathname, createRequest(`${manifestUrl.pathname}${manifestUrl.search}`), manifest.response);
+      expect(manifest.state.statusCode).toBe(200);
+      expect(manifest.state.contentType).toBe('application/manifest+json; charset=utf-8');
+      expect(manifest.state.headers['cache-control']).toBe('no-store');
+      expect(JSON.parse(String(manifest.state.body))).toEqual({
+        name: 'Test Game',
+        display: 'fullscreen',
+        start_url: `${previewPath}${query}`,
+        scope: '/super-preview',
+      });
+      expect(messageRequest).not.toHaveBeenCalled();
+      expect(profileGetConfig).not.toHaveBeenCalled();
+    },
+  );
+
+  it('updates the web app manifest name from the editor API on each request', async () => {
+    /// @case
+    /// 1. The editor project name contains Unicode, quotes, a backslash and a newline.
+    /// 2. The project name changes before the manifest is requested again.
+    /// @expect
+    /// Both responses are valid JSON and expose the current name without HTML escaping or cached project metadata.
+    for (const name of ['四时 "Thyme" \\ preview\n<&>', 'Renamed Game']) {
+      Reflect.set(Editor.Project, 'name', name);
+      const { response, state } = createResponse();
+      await invokeStringRoute('/super-preview/manifest.webmanifest', createRequest('/super-preview/manifest.webmanifest'), response);
+      expect(state.statusCode).toBe(200);
+      expect(JSON.parse(String(state.body))).toMatchObject({ name, display: 'fullscreen' });
+    }
   });
 
   it('keeps the engine splash visible and only preserves its full duration on request', async () => {

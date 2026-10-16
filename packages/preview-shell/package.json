@@ -7,6 +7,7 @@
   ],
   "exports": {
     "./index.html.ejs": "./lib/index.html.ejs",
+    "./manifest.webmanifest.ejs": "./lib/manifest.webmanifest.ejs",
     "./manifest.json": "./lib/.vite/manifest.json",
     "./assets/*": "./lib/assets/*"
   },

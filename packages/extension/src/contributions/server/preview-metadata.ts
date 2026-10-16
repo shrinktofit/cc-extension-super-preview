@@ -26,6 +26,7 @@ export interface PreviewMetadata {
   serverOrigin: string;
   settingsJsUrl: string;
   systemJsUrl: string;
+  webAppManifestUrl: string;
 }
 
 interface PreviewServerResources {
@@ -48,6 +49,8 @@ export async function createPreviewMetadata(
   const { splashPreview } = previewOptions;
   const resources = await queryPreviewServerResources(launchScene, splashPreview);
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
+  const webAppManifestUrl = createPreviewRequestUrl(request);
+  webAppManifestUrl.pathname = `${webAppManifestUrl.pathname.replace(/\/$/u, '')}/manifest.webmanifest`;
 
   logger.debug(
     `preview metadata request: origin=${serverOrigin}, scene=${launchScene}, settings=${resources.settingsJsPath}, engine=${resources.engineBundlePath}`,
@@ -78,6 +81,7 @@ export async function createPreviewMetadata(
     serverOrigin,
     settingsJsUrl: toServerUrl(resources.settingsJsPath, serverOrigin),
     systemJsUrl: `${serverOrigin}/scripting/systemjs/system.js`,
+    webAppManifestUrl: webAppManifestUrl.href,
   };
 }
 

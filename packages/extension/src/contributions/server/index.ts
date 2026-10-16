@@ -11,6 +11,7 @@ import {
 } from './preset-route.js';
 import {
   getPreviewShellErrorStatusCode,
+  renderSuperPreviewWebAppManifest,
   sendSuperPreviewShellAsset,
 } from './preview-shell.js';
 import type { NextFunction, Request, Response } from 'express';
@@ -33,6 +34,10 @@ export const get = [
     handle: handlePresetRequest,
   },
   {
+    url: /^\/super-preview(?:\/preset-[a-z0-9][a-z0-9-]*)?\/manifest\.webmanifest$/u,
+    handle: sendWebAppManifest,
+  },
+  {
     url: `/${superPreviewRoutePrefix}/query-extname-map.json`,
     handle: queryExtnameMap,
   },
@@ -41,6 +46,18 @@ export const get = [
     handle: sendShellAsset,
   },
 ] satisfies ServerGetRoute[];
+
+function sendWebAppManifest(request: Request, response: Response) {
+  try {
+    response
+      .status(200)
+      .type('application/manifest+json; charset=utf-8')
+      .set('cache-control', 'no-store')
+      .send(renderSuperPreviewWebAppManifest(request));
+  } catch (error) {
+    handleServerError(request, response, error);
+  }
+}
 
 async function queryExtnameMap(request: Request, response: Response) {
   try {

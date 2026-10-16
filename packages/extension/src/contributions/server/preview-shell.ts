@@ -8,8 +8,8 @@ import {
 } from 'node:path';
 import { render as renderEjs } from 'ejs';
 import { superPreviewRoutePrefix } from '../../constants.js';
-import type { PreviewMetadata } from './preview-metadata.js';
-import type { Response } from 'express';
+import { createPreviewRequestUrl, type PreviewMetadata } from './preview-metadata.js';
+import type { Request, Response } from 'express';
 
 const previewShellPackageName = '@bsgames/cc-extension-super-preview-preview-shell';
 const require = createRequire(__filename);
@@ -38,11 +38,13 @@ interface PreviewShellTemplateLocals {
   packImportMapUrl: string;
   packResolutionDetailMapUrlJson: string;
   polyfillsUrl: string;
+  projectName: string;
   runtimeImportMapJson: string;
   runtimeSystemImportMapJson: string;
   settingsJsUrl: string;
   styleUrls: string[];
   systemJsUrl: string;
+  webAppManifestUrl: string;
 }
 
 interface PreviewShellManifestEntry {
@@ -80,6 +82,7 @@ export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
     packImportMapUrl: metadata.packImportMapUrl,
     packResolutionDetailMapUrlJson: toScriptJson(metadata.packResolutionDetailMapUrl),
     polyfillsUrl: metadata.polyfillsUrl,
+    projectName: Editor.Project.name,
     runtimeImportMapJson: toScriptJson(
       createRuntimeImportMap(metadata.serverOrigin, runtimeEntry.file),
     ),
@@ -89,9 +92,21 @@ export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
     settingsJsUrl: metadata.settingsJsUrl,
     styleUrls: [toPreviewShellAssetUrl(metadata.serverOrigin, 'assets/style.css')],
     systemJsUrl: metadata.systemJsUrl,
+    webAppManifestUrl: metadata.webAppManifestUrl,
   };
 
   return renderEjs(template, locals, { filename: templatePath });
+}
+
+export function renderSuperPreviewWebAppManifest(request: Request) {
+  const requestUrl = createPreviewRequestUrl(request);
+  const templatePath = resolvePreviewShellExport('manifest.webmanifest.ejs');
+  const template = readFileSync(templatePath, 'utf8');
+  return renderEjs(template, {
+    projectName: Editor.Project.name,
+    startUrl: `${requestUrl.pathname.slice(0, -'/manifest.webmanifest'.length)}${requestUrl.search}`,
+    scope: `/${superPreviewRoutePrefix}`,
+  }, { filename: templatePath });
 }
 
 function createRuntimeImportMap(serverOrigin: string, assetPath: string) {
