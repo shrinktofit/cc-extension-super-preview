@@ -21,6 +21,8 @@
     "@bsgames/cc-extension-super-preview-workflow": "workspace:*",
     "@cocos/creator-types": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "bowser": "^2.14.1",
+    "eruda": "^3.4.3",
     "pretty-format": "^30.3.0",
     "typescript": "catalog:",
     "vite": "catalog:",

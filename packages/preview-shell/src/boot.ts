@@ -1,1 +1,3 @@
-import './boot/index';
+import './boot/eruda';
+
+await import('./boot/index');
