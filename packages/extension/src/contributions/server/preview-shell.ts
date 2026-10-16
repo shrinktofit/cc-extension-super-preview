@@ -20,6 +20,7 @@ interface BootConfig {
   packResolutionDetailMapUrl: string;
   previewServerUrl: string;
   serverOrigin: string;
+  engineImportGuide?: PreviewMetadata['engineImportGuide'];
 }
 
 interface SuperPreviewConfig {
@@ -34,6 +35,7 @@ interface PreviewShellTemplateLocals {
   configJson: string;
   engineBundleUrl: string;
   engineImportMapUrl: string;
+  engineImportGuide: PreviewMetadata['engineImportGuide'];
   globalImportMapUrl: string;
   packImportMapUrl: string;
   packResolutionDetailMapUrlJson: string;
@@ -78,6 +80,7 @@ export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
     configJson: toScriptJson(config),
     engineBundleUrl: metadata.engineBundleUrl,
     engineImportMapUrl: metadata.engineImportMapUrl,
+    engineImportGuide: metadata.engineImportGuide,
     globalImportMapUrl: metadata.globalImportMapUrl,
     packImportMapUrl: metadata.packImportMapUrl,
     packResolutionDetailMapUrlJson: toScriptJson(metadata.packResolutionDetailMapUrl),
@@ -137,6 +140,7 @@ function createBootConfig(metadata: PreviewMetadata): BootConfig {
     packResolutionDetailMapUrl: metadata.packResolutionDetailMapUrl,
     previewServerUrl: metadata.previewServerUrl,
     serverOrigin: metadata.serverOrigin,
+    engineImportGuide: metadata.engineImportGuide,
   };
 }
 

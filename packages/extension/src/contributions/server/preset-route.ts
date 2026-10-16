@@ -29,14 +29,14 @@ const builtInPreset: ResolvedPreset = Object.freeze({
   id: 'default',
   launchParams: Object.freeze({}),
 });
-const genericServerError = 'Super Preview server error. See editor diagnostics log for details.';
+const serverErrorPrefix = 'Super Preview server error';
 
 export function handleDefaultPresetRequest(request: Request, response: Response) {
   return renderPreset(request, response);
 }
 
 export function handlePresetRequest(request: Request, response: Response) {
-  const [presetId] = request.params as unknown as string[];
+  const presetId = request.params[0];
   return renderPreset(request, response, presetId);
 }
 
@@ -114,11 +114,12 @@ function handlePresetError(
     method: request.method,
     requestUrl: request.originalUrl ?? request.url,
   });
+  const message = error instanceof Error ? error.message : String(error);
   response
     .status(statusCode)
     .type('text/plain; charset=utf-8')
     .set('cache-control', 'no-store')
     .send(statusCode >= 500
-      ? genericServerError
-      : error instanceof Error ? error.message : String(error));
+      ? `${serverErrorPrefix}: ${message}`
+      : message);
 }

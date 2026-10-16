@@ -15,7 +15,7 @@
     "registry": "http://exm.bluesquall.local/",
     "registryPackageName": "@bsgames/extension-super-preview"
   },
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "package_version": 2,
@@ -71,6 +71,7 @@
     "@types/ejs": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",
+    "express": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "^3.2.4"

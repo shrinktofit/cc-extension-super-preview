@@ -212,7 +212,7 @@ describe('Super Preview extension surfaces', () => {
     expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=request-scene-uuid'));
     expect(state.body).toEqual(expect.stringContaining('splashPreview=true'));
     expect(state.body).toEqual(expect.stringContaining(
-      'https://preview.test/scripting/engine/cache/dev/preview/bundled/index.js',
+      'https://preview.test/super-preview/engine/bundled/index.js',
     ));
     const config = readEmbeddedConfig(String(state.body));
     expect(config).toMatchObject({
@@ -558,7 +558,7 @@ describe('Super Preview extension surfaces', () => {
     /// @case
     /// 1. A preset entry throws during module evaluation.
     /// @expect
-    /// The route returns 500, requests cleanup for the declared entry, and diagnostics preserve the evaluation error.
+    /// The route returns 500 with the real message and no stack, requests cleanup for the declared entry, and diagnostics preserve the full stack.
     const projectPath = mkdtempSync(join(tmpdir(), 'super-preview-preset-error-'));
     const moduleError = new Error('preset module evaluation failed');
     moduleRequireFile.mockImplementation(() => {
@@ -578,6 +578,7 @@ describe('Super Preview extension surfaces', () => {
       );
 
       expect(state.statusCode).toBe(500);
+      expect(state.body).toBe(`Super Preview server error: ${moduleError.message}`);
       expect(moduleRemoveCache).toHaveBeenCalledTimes(1);
       expect(moduleRemoveCache).toHaveBeenCalledWith(
         'V:\\extensions\\example-preset-module-error\\dist\\module-error.cjs',
@@ -601,6 +602,7 @@ describe('Super Preview extension surfaces', () => {
           payload: {
             error: {
               message: moduleError.message,
+              stack: moduleError.stack,
             },
           },
         });

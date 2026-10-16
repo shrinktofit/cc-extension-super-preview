@@ -2,6 +2,10 @@ import type { CCPreviewSettings } from './engine-ready';
 
 declare global {
   interface SuperPreviewSystemJs {
+    constructor: { prototype: SuperPreviewSystemJs };
+    resolve(specifier: string, parent?: string): string;
+    instantiate(url: string, parent?: string): unknown;
+    getRegister(): unknown;
     import: {
       (moduleName: 'cc'): Promise<typeof import('cc')>;
       (moduleName: 'super-preview'): Promise<typeof import('super-preview')>;

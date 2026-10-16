@@ -1,6 +1,6 @@
 {
   "name": "@bsgames/cc-extension-super-preview-preview-shell",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "files": [
     "lib"

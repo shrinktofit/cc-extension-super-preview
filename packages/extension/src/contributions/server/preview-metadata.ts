@@ -1,12 +1,11 @@
-import {
-  join,
-  relative,
-} from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { URL } from 'node:url';
-import { superPreviewRoutePrefix } from '../../constants.js';
+import { enginePreviewRoutePrefix, superPreviewRoutePrefix } from '../../constants.js';
 import type { LaunchParams, PreviewOptions } from '../../launch-params.js';
 import { logger } from '../../logger.js';
 import { writeServerDiagnosticLog } from './diagnostic-log.js';
+import { queryEnginePreviewRoot } from './engine-preview.js';
 import type { Request } from 'express';
 
 export interface PreviewMetadata {
@@ -14,6 +13,15 @@ export interface PreviewMetadata {
   assetsNativeBaseUrl: string;
   engineBundleUrl: string;
   engineImportMapUrl: string;
+  engineImportGuide?: {
+    url: string;
+    options: {
+      platform: string;
+      mode: string;
+      features: readonly string[];
+      flags: Readonly<Record<string, boolean | number>>;
+    };
+  };
   globalImportMapUrl: string;
   launchParams: LaunchParams;
   launchScene: string;
@@ -47,13 +55,26 @@ export async function createPreviewMetadata(
   const serverOrigin = inferServerOrigin(request);
   const launchScene = await selectLaunchScene(requestedScene);
   const { splashPreview } = previewOptions;
-  const resources = await queryPreviewServerResources(launchScene, splashPreview);
+  const resources = createPreviewServerResources(launchScene, splashPreview);
+  const enginePreviewRoot = await queryEnginePreviewRoot();
+  let engineImportGuide: PreviewMetadata['engineImportGuide'];
+  if (existsSync(join(enginePreviewRoot, 'import-guide.js'))) {
+    const environment = { platform: 'HTML5', mode: 'PREVIEW', flags: { DEBUG: previewOptions.debug } };
+    const profile = await Editor.Message.request('engine', 'query-engine-modules-profile', undefined, environment) as {
+      includeModules: string[];
+    };
+    engineImportGuide = {
+      // The editor's engine asset loader recognizes this base for engine_external redirects.
+      url: `${serverOrigin}/scripting/engine/import-guide.js`,
+      options: { ...environment, features: profile.includeModules },
+    };
+  }
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
   const webAppManifestUrl = createPreviewRequestUrl(request);
   webAppManifestUrl.pathname = `${webAppManifestUrl.pathname.replace(/\/$/u, '')}/manifest.webmanifest`;
 
   logger.debug(
-    `preview metadata request: origin=${serverOrigin}, scene=${launchScene}, settings=${resources.settingsJsPath}, engine=${resources.engineBundlePath}`,
+    `preview metadata request: origin=${serverOrigin}, scene=${launchScene}, settings=${resources.settingsJsPath}, engine=${engineImportGuide?.url ?? resources.engineBundlePath}`,
   );
   writeServerDiagnosticLog('info', 'preview-metadata-resolved', {
     launchScene,
@@ -69,6 +90,7 @@ export async function createPreviewMetadata(
     assetsNativeBaseUrl: `${serverOrigin}/assets/general/native`,
     engineBundleUrl: toServerUrl(resources.engineBundlePath, serverOrigin),
     engineImportMapUrl: toServerUrl(resources.engineImportMapPath, serverOrigin),
+    engineImportGuide,
     globalImportMapUrl: toServerUrl(resources.globalImportMapPath, serverOrigin),
     launchParams,
     launchScene,
@@ -95,11 +117,11 @@ async function selectLaunchScene(scene: string | undefined) {
     || 'current_scene';
 }
 
-async function queryPreviewServerResources(
+function createPreviewServerResources(
   launchScene: string,
   splashPreview: boolean,
-): Promise<PreviewServerResources> {
-  const enginePreviewBasePath = await queryEnginePreviewBasePath();
+): PreviewServerResources {
+  const enginePreviewBasePath = `/${enginePreviewRoutePrefix}`;
   return {
     engineBundlePath: `${enginePreviewBasePath}/bundled/index.js`,
     engineImportMapPath: `${enginePreviewBasePath}/import-map.json`,
@@ -108,36 +130,6 @@ async function queryPreviewServerResources(
     packResolutionDetailMapPath: '/scripting/x/resolution-detail-map.json',
     settingsJsPath: createSettingsJsPath(launchScene, splashPreview),
   };
-}
-
-async function queryEnginePreviewBasePath() {
-  const engineInfo = await Editor.Message.request('engine', 'query-engine-info') as unknown;
-  if (!isRecord(engineInfo)) {
-    throw new Error('engine query-engine-info did not return an object');
-  }
-
-  const typescriptInfo = engineInfo.typescript;
-  if (!isRecord(typescriptInfo)) {
-    throw new Error('engine query-engine-info did not include typescript info');
-  }
-
-  const engineRoot = typescriptInfo.path;
-  if (typeof engineRoot !== 'string' || !engineRoot) {
-    throw new Error('engine query-engine-info did not include typescript.path');
-  }
-
-  const outputs = engineInfo.outputs;
-  const previewRoot = isRecord(outputs) ? outputs.preview : undefined;
-  const engineDistRoot = typeof previewRoot === 'string' && previewRoot
-    ? previewRoot
-    : join(engineRoot, 'bin', '.cache', 'dev', 'preview');
-  const relativeEngineDistRoot = relative(engineRoot, engineDistRoot).replace(/\\/gu, '/');
-
-  if (!relativeEngineDistRoot || relativeEngineDistRoot.startsWith('../')) {
-    throw new Error(`engine preview output must stay under engine root: ${engineDistRoot}`);
-  }
-
-  return `/scripting/engine/${relativeEngineDistRoot}`;
 }
 
 function createSettingsJsPath(launchScene: string, splashPreview: boolean) {
@@ -178,8 +170,4 @@ export function createPreviewRequestUrl(request: Request) {
 
 function toServerUrl(value: string, serverOrigin: string) {
   return new URL(value, `${serverOrigin}/`).href;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
