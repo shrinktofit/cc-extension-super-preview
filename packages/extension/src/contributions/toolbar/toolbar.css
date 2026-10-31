@@ -1,0 +1,75 @@
+:host,
+#super-preview-root {
+  display: flex;
+  min-width: 0;
+  overflow: visible;
+}
+
+.super-preview-toolbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+  height: 22px;
+  margin-left: 8px;
+  overflow: visible;
+}
+
+.super-preview-launch {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 22px;
+}
+
+.super-preview-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 22px;
+  padding: 0;
+}
+
+.super-preview-footnote {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--color-info-fill);
+  font-size: 5px;
+  font-weight: 700;
+  line-height: 5px;
+  letter-spacing: 0.25px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.super-preview-preset,
+.super-preview-scene {
+  --vortex-select-min-width: 0;
+  --vortex-select-min-height: 22px;
+  --vortex-select-padding-left: 6px;
+  --vortex-select-arrow-area-width: 22px;
+  flex: 0 1 auto;
+  height: 22px;
+}
+
+.super-preview-scene-option {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.super-preview-scene-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-preview-scene-path {
+  color: var(--vortex-color-text-muted);
+  font-size: 11px;
+}

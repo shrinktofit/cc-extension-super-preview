@@ -15,7 +15,7 @@
     "registry": "http://exm.bluesquall.local/",
     "registryPackageName": "@bsgames/extension-super-preview"
   },
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "type": "module",
   "package_version": 2,
@@ -38,6 +38,30 @@
       }
     ],
     "messages": {
+      "query-presets": {
+        "methods": [
+          "query-presets"
+        ],
+        "public": false
+      },
+      "select-preset": {
+        "methods": [
+          "select-preset"
+        ],
+        "public": false
+      },
+      "query-scenes": {
+        "methods": [
+          "query-scenes"
+        ],
+        "public": false
+      },
+      "select-scene": {
+        "methods": [
+          "select-scene"
+        ],
+        "public": false
+      },
       "evaluate-preset-launch-params": {
         "methods": [
           "evaluate-preset-launch-params"
@@ -63,7 +87,7 @@
     "build": "node --run typecheck && vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit"
   },
   "devDependencies": {
     "@bsgames/cc-extension-super-preview-workflow": "workspace:*",
@@ -71,10 +95,17 @@
     "@types/ejs": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vortex/editor-theme": "link:../../../../vortex-collection/vortex/packages/vortex-editor-theme",
+    "@vortex/ui-elements": "link:../../../../vortex-collection/vortex/packages/vortex-ui-elements",
+    "@vortex/ui-elements-vue": "link:../../../../vortex-collection/vortex/packages/vortex-ui-elements-vue",
     "express": "catalog:",
+    "happy-dom": "^20.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "vue": "catalog:",
+    "vue-tsc": "catalog:"
   },
   "dependencies": {
     "@bsgames/cc-extension-super-preview-preview-shell": "workspace:*",

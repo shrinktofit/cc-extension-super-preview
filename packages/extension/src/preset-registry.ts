@@ -6,12 +6,15 @@ import {
 } from 'node:path';
 import { z } from 'zod';
 import { logger } from './logger.js';
+import type { PresetSummary } from './preset-protocol.js';
 import {
   formatErrorForDiagnosticLog,
   writeServerDiagnosticLog,
 } from './contributions/server/diagnostic-log.js';
 
 const presetDeclarationSchema = z.strictObject({
+  label: z.string().trim().min(1).optional(),
+  description: z.string().trim().min(1).optional(),
   export: z.string().trim().min(1, 'preset export must be a non-empty name').optional(),
   id: z.string().regex(
     /^[a-z0-9][a-z0-9-]*$/u,
@@ -61,7 +64,7 @@ export class PresetConflictError extends Error {
     readonly presetId: string,
     readonly contributors: readonly string[],
   ) {
-    super(`Super Preview preset has multiple enabled contributors: ${presetId}`);
+    super(`Super Preview preset has multiple enabled contributors: ${presetId} (${contributors.join(', ')})`);
     this.name = 'PresetConflictError';
   }
 }
@@ -88,22 +91,41 @@ export class PresetRegistry {
           packageInfo,
           z.prettifyError(parsedContribution.error),
         );
+        Editor.Message.broadcast('super-preview:presets-changed');
         return;
       }
 
       for (const declaration of parsedContribution.data.presets) {
         this._registerPreset(packageInfo, declaration);
       }
+      Editor.Message.broadcast('super-preview:presets-changed');
     },
 
     disable: (packageInfo: Editor.Interface.PackageInfo) => {
       this._removePackageRecords(packageInfo);
+      Editor.Message.broadcast('super-preview:presets-changed');
     },
 
     unregister: (packageInfo: Editor.Interface.PackageInfo) => {
       this._removePackageRecords(packageInfo);
+      Editor.Message.broadcast('super-preview:presets-changed');
     },
   };
+
+  getPresets(): PresetSummary[] {
+    return Array.from(this._recordsByPreset, ([id, records]) => {
+      const enabledRecords = Array.from(records.values());
+      const { declaration } = enabledRecords[0];
+      return {
+        id,
+        label: declaration.label ?? id,
+        description: declaration.description,
+        unavailableReason: enabledRecords.length > 1
+          ? new PresetConflictError(id, enabledRecords.map((record) => record.packageInfo.name)).message
+          : undefined,
+      };
+    }).sort((a, b) => a.label.localeCompare(b.label));
+  }
 
   async evaluatePreset(
     presetId: string,

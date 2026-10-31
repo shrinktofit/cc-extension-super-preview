@@ -45,7 +45,7 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
   });
 
   it.each([
-    ['preset', '/super-preview/preset-broken', 'preset-route-error'],
+    ['preset', '/super-preview/presets/broken', 'preset-route-error'],
     ['engine', '/super-preview/engine/import-map.json', 'server-route-error'],
   ])('shows the real %s error after the server error prefix and keeps its stack in diagnostics', async (_surface, path, event) => {
     /// @case
@@ -125,11 +125,12 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
     },
   );
 
-  it('renders a preset and serves its declared engine output independently of the source directory', async () => {
+  it('renders a preset and serves its manifest and declared engine output', async () => {
     /// @case
-    /// 1. A preset request succeeds and the editor reports an independent preview output.
+    /// 1. A browser opens a preset resource with scene and launch parameters, then follows its manifest and engine bundle links.
+    /// 2. The editor reports an independent preview output.
     /// @expect
-    /// The preset page and its engine bundle both return 200 through the registered HTTP routes.
+    /// The preset ID reaches the editor unchanged, all resources return 200, and the manifest preserves the launch URL without evaluating the preset again.
     const previewRoot = join(workspace, 'preview');
     await mkdir(join(previewRoot, 'bundled'), { recursive: true });
     await writeFile(join(previewRoot, 'bundled', 'index.js'), 'preset engine');
@@ -138,9 +139,22 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
         ? { ok: true, launchParams: {} }
         : { typescript: { path: join(workspace, 'source') }, outputs: { preview: previewRoot } },
     ));
-    const page = await fetch(`${origin}/super-preview/preset-example`);
+    const previewPath = '/super-preview/presets/example-full-flow?--scene=example-scene&level=1';
+    const page = await fetch(`${origin}${previewPath}`);
     expect(page.status).toBe(200);
-    const bundleUrl = (await page.text()).match(/<script src="([^"]+\/engine\/bundled\/index.js)">/u)?.[1];
+    expect(messageRequest).toHaveBeenCalledWith('super-preview', 'evaluate-preset-launch-params', {
+      presetId: 'example-full-flow',
+      requestUrl: `${origin}${previewPath}`,
+    });
+    const html = await page.text();
+    const manifestUrl = html.match(/<link rel="manifest" href="([^"]+)">/u)?.[1].replaceAll('&amp;', '&');
+    expect(manifestUrl).toBe(`${origin}/super-preview/presets/example-full-flow/manifest.webmanifest?--scene=example-scene&level=1`);
+    messageRequest.mockClear();
+    const manifest = await fetch(manifestUrl!);
+    expect(manifest.status).toBe(200);
+    expect(await manifest.json()).toMatchObject({ start_url: previewPath, scope: '/super-preview' });
+    expect(messageRequest).not.toHaveBeenCalled();
+    const bundleUrl = html.match(/<script src="([^"]+\/engine\/bundled\/index.js)">/u)?.[1];
     expect(bundleUrl).toBeDefined();
     const bundle = await fetch(bundleUrl!);
     expect(bundle.status).toBe(200);

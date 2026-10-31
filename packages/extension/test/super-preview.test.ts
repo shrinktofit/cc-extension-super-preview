@@ -26,6 +26,7 @@ interface ResponseState {
 const messageRequest = vi.fn();
 const messageSend = vi.fn();
 const profileGetConfig = vi.fn();
+const profileSetConfig = vi.fn();
 const moduleRemoveCache = vi.fn();
 const moduleRequireFile = vi.fn();
 const broadcastListeners = new Map<string, Set<(...args: unknown[]) => void>>();
@@ -49,6 +50,7 @@ vi.stubGlobal('Editor', {
     },
     request: messageRequest,
     send: messageSend,
+    broadcast: (name: string, ...args: unknown[]) => emitBroadcast(name, ...args),
   },
   Module: {
     removeCache: moduleRemoveCache,
@@ -56,6 +58,7 @@ vi.stubGlobal('Editor', {
   },
   Profile: {
     getConfig: profileGetConfig,
+    setConfig: profileSetConfig,
   },
   Project: {
     name: 'Test Game',
@@ -64,7 +67,6 @@ vi.stubGlobal('Editor', {
 });
 
 const { get } = await import('../src/contributions/server/index.js');
-const toolbar = await import('../src/contributions/toolbar/index.js');
 const {
   contributions: presetContributions,
   methods,
@@ -81,6 +83,7 @@ describe('Super Preview extension surfaces', () => {
     moduleRemoveCache.mockReset();
     moduleRequireFile.mockReset();
     profileGetConfig.mockReset();
+    profileSetConfig.mockReset();
     Reflect.set(Editor.Project, 'name', 'Test Game');
     installDefaultEditorResponses();
   });
@@ -131,7 +134,7 @@ describe('Super Preview extension surfaces', () => {
       /// @expect
       /// The response is a clear, uncached 400 error and the preset is not evaluated.
       const { response, state } = createResponse();
-      await invokePresetRoute(createRequest(`/super-preview/preset-example?${query}`), response);
+      await invokePresetRoute(createRequest(`/super-preview/presets/example?${query}`), response);
       expect(state.statusCode).toBe(400);
       expect(state.contentType).toBe('text/plain; charset=utf-8');
       expect(state.headers['cache-control']).toBe('no-store');
@@ -176,7 +179,7 @@ describe('Super Preview extension surfaces', () => {
     enablePreset('empty-scene-preset', { id: 'example', module: './dist/example.cjs' });
     profileGetConfig.mockResolvedValue('profile-scene');
     const preset = createResponse();
-    await invokePresetRoute(createRequest(`/super-preview/preset-example?--scene=${scene}&scene=lobby`), preset.response);
+    await invokePresetRoute(createRequest(`/super-preview/presets/example?--scene=${scene}&scene=lobby`), preset.response);
     expect(preset.state.body).toEqual(expect.stringContaining('/settings.js?scene=preset-scene'));
     expect(readEmbeddedConfig(String(preset.state.body)).launchParams).toEqual({ scene: 'lobby' });
 
@@ -232,7 +235,7 @@ describe('Super Preview extension surfaces', () => {
     expect(messageSend).not.toHaveBeenCalledWith('preview', 'ready');
   });
 
-  it.each(['/super-preview', '/super-preview/preset-example'])(
+  it.each(['/super-preview', '/super-preview/presets/example'])(
     'renders a fullscreen web app manifest for %s without changing launch parameters',
     async (previewPath) => {
       /// @case
@@ -334,13 +337,17 @@ describe('Super Preview extension surfaces', () => {
     expect(shell).not.toContain('boot-status');
   });
 
-  it('uses the editor preview scene when the request does not select one', async () => {
+  it('uses its own scene selection independently of the built-in preview', async () => {
     /// @case
     /// 1. The preview URL does not include a scene parameter.
-    /// 2. The editor preview profile selects a scene.
+    /// 2. Super Preview and the built-in preview have different saved scene choices.
     /// @expect
-    /// The generated settings request uses the profile scene instead of current_scene.
-    profileGetConfig.mockResolvedValue('profile-scene-uuid');
+    /// The selected Super Preview scene is used; with no saved choice, current_scene stays live.
+    profileGetConfig.mockImplementation(async (name, key) => {
+      if (name === 'preview') return 'built-in-scene';
+      if (name === 'super-preview' && key === 'selectedScene') return 'profile-scene-uuid';
+      return undefined;
+    });
     const { response, state } = createResponse();
 
     await invokeStringRoute('/super-preview', createRequest('/super-preview'), response);
@@ -348,7 +355,7 @@ describe('Super Preview extension surfaces', () => {
     expect(state.statusCode).toBe(200);
     expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=profile-scene-uuid'));
 
-    profileGetConfig.mockResolvedValue(undefined);
+    profileGetConfig.mockImplementation(async (name) => name === 'preview' ? 'built-in-scene' : undefined);
     const defaultResponse = createResponse();
     await invokeStringRoute(
       '/super-preview',
@@ -406,7 +413,7 @@ describe('Super Preview extension surfaces', () => {
 
     const presetSceneResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-example?serverPort=12500'),
+      createRequest('/super-preview/presets/example?serverPort=12500'),
       presetSceneResponse.response,
     );
     expect(presetSceneResponse.state.statusCode).toBe(200);
@@ -422,7 +429,7 @@ describe('Super Preview extension surfaces', () => {
 
     await invokePresetRoute(
       createRequest(
-        '/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
+        '/super-preview/presets/example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       ),
       response,
     );
@@ -433,7 +440,7 @@ describe('Super Preview extension surfaces', () => {
     expect(createPreset).toHaveBeenCalledWith({
       projectPath: '',
       requestUrl: new URL(
-        'https://preview.test/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
+        'https://preview.test/super-preview/presets/example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       ),
     });
     expect(messageRequest).toHaveBeenCalledWith(
@@ -442,7 +449,7 @@ describe('Super Preview extension surfaces', () => {
       {
         presetId: 'example',
         requestUrl:
-          'https://preview.test/super-preview/preset-example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
+          'https://preview.test/super-preview/presets/example?--scene=query-scene-uuid&scene=query-game-scene-param&serverPort=13000&serverPort=13500&fullFlow=',
       },
     );
     const html = String(state.body);
@@ -506,7 +513,7 @@ describe('Super Preview extension surfaces', () => {
 
     const { response, state } = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-ipc-boundary'),
+      createRequest('/super-preview/presets/ipc-boundary'),
       response,
     );
 
@@ -532,7 +539,7 @@ describe('Super Preview extension surfaces', () => {
 
     const firstResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-lifecycle'),
+      createRequest('/super-preview/presets/lifecycle'),
       firstResponse.response,
     );
     expect(firstResponse.state.statusCode).toBe(200);
@@ -547,7 +554,7 @@ describe('Super Preview extension surfaces', () => {
 
     const secondResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-lifecycle'),
+      createRequest('/super-preview/presets/lifecycle'),
       secondResponse.response,
     );
     expect(secondResponse.state.statusCode).toBe(200);
@@ -573,7 +580,7 @@ describe('Super Preview extension surfaces', () => {
     try {
       const { response, state } = createResponse();
       await invokePresetRoute(
-        createRequest('/super-preview/preset-module-error'),
+        createRequest('/super-preview/presets/module-error'),
         response,
       );
 
@@ -650,7 +657,7 @@ describe('Super Preview extension surfaces', () => {
 
     const namedResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-named'),
+      createRequest('/super-preview/presets/named'),
       namedResponse.response,
     );
     expect(namedResponse.state.statusCode).toBe(200);
@@ -660,7 +667,7 @@ describe('Super Preview extension surfaces', () => {
 
     const invalidResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-invalid'),
+      createRequest('/super-preview/presets/invalid'),
       invalidResponse.response,
     );
     expect(invalidResponse.state.statusCode).toBe(500);
@@ -686,14 +693,14 @@ describe('Super Preview extension surfaces', () => {
 
     const missingResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-missing'),
+      createRequest('/super-preview/presets/missing'),
       missingResponse.response,
     );
     expect(missingResponse.state.statusCode).toBe(404);
 
     const conflictResponse = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-conflict'),
+      createRequest('/super-preview/presets/conflict'),
       conflictResponse.response,
     );
     expect(conflictResponse.state.statusCode).toBe(409);
@@ -715,11 +722,117 @@ describe('Super Preview extension surfaces', () => {
 
     const { response, state } = createResponse();
     await invokePresetRoute(
-      createRequest('/super-preview/preset-escaped'),
+      createRequest('/super-preview/presets/escaped'),
       response,
     );
 
     expect(state.statusCode).toBe(404);
+    expect(moduleRequireFile).not.toHaveBeenCalled();
+  });
+
+  it('lists and remembers presets without executing their modules, then opens the selected route', async () => {
+    /// @case
+    /// 1. An extension contributes a named preset and the user selects it from the available presets.
+    /// 2. The user opens Super Preview and then switches back to the default.
+    /// @expect
+    /// Selection persists in the project-local profile, opening uses the selected route, and listing or selecting never loads user JavaScript.
+    let selectedPresetId: string | undefined;
+    profileGetConfig.mockImplementation(async (_name, key) => key === 'selectedPresetId' ? selectedPresetId : undefined);
+    profileSetConfig.mockImplementation(async (_name, _key, value) => {
+      selectedPresetId = value;
+    });
+    enablePreset('named-preview', {
+      id: 'full-flow', label: '完整流程', description: '从启动流程进入游戏', module: './dist/preview.cjs',
+    });
+
+    expect(await methods['query-presets']()).toEqual({
+      presets: [{ id: 'full-flow', label: '完整流程', description: '从启动流程进入游戏' }],
+      selectedPresetId: undefined,
+    });
+    await methods['select-preset']('full-flow');
+    expect(profileSetConfig).toHaveBeenCalledWith('super-preview', 'selectedPresetId', 'full-flow', 'local');
+    expect((await methods['query-presets']()).selectedPresetId).toBe('full-flow');
+    await methods.open();
+    expect(messageSend).toHaveBeenLastCalledWith('program', 'open-url', 'https://preview.test/super-preview/presets/full-flow');
+    expect(moduleRequireFile).not.toHaveBeenCalled();
+
+    await methods['select-preset']();
+    await methods.open();
+    expect(messageSend).toHaveBeenLastCalledWith('program', 'open-url', 'https://preview.test/super-preview');
+    expect((await methods['query-presets']()).selectedPresetId).toBeUndefined();
+  });
+
+  it('applies preset scene, independent scene selection, and explicit URL priority at request time', async () => {
+    /// @case
+    /// The user chooses a scene and a preset, whose callback may or may not specify a scene.
+    /// @expect
+    /// Preset scenes win over the picker, the picker supplies unspecified scenes, and URL overrides still win.
+    const saved = new Map<string, string>();
+    profileGetConfig.mockImplementation(async (name, key) => name === 'preview' ? 'built-in-scene' : saved.get(key));
+    profileSetConfig.mockImplementation(async (_name, key, value) => {
+      saved.set(key, value);
+    });
+    let presetScene: string | undefined;
+    const callback = vi.fn(async () => ({ scene: presetScene, launchParams: { mode: 'test' } }));
+    moduleRequireFile.mockReturnValue({ default: callback });
+    enablePreset('scene-priority', { id: 'config', module: './preset.cjs' });
+    await methods['select-scene']('scene-beta');
+    await methods['select-preset']('config');
+    expect(callback).not.toHaveBeenCalled();
+    for (const [configuredScene, url, expected] of [
+      [undefined, '/super-preview/presets/config', 'scene-beta'],
+      ['preset-scene', '/super-preview/presets/config', 'preset-scene'],
+      ['preset-scene', '/super-preview/presets/config?--scene=scene-alpha', 'scene-alpha'],
+    ] as const) {
+      presetScene = configuredScene;
+      const result = createResponse();
+      await invokePresetRoute(createRequest(url), result.response);
+      expect(result.state.statusCode).toBe(200);
+      expect(result.state.body).toEqual(expect.stringContaining('/settings.js?scene=' + expected));
+      expect(readEmbeddedConfig(String(result.state.body)).launchParams).toEqual({ mode: 'test' });
+      expect((await methods['query-scenes']()).selectedScene).toBe('scene-beta');
+    }
+    expect(callback).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects unavailable scene choices and blocks a removed saved scene at launch', async () => {
+    /// @case
+    /// A requested scene is missing or is a different asset type; a saved scene has been deleted.
+    /// @expect
+    /// Invalid choices are not saved and launch reports the missing scene instead of choosing another.
+    messageRequest.mockImplementation(async (extension, message, request) => {
+      if (extension === 'asset-db' && message === 'query-asset-info') {
+        return request === 'prefab' ? { type: 'cc.Prefab' } : null;
+      }
+      return defaultMessageResponse(extension, message, request);
+    });
+    await expect(methods['select-scene']('missing')).rejects.toThrow('场景已不可用');
+    await expect(methods['select-scene']('prefab')).rejects.toThrow('场景已不可用');
+    expect(profileSetConfig).not.toHaveBeenCalled();
+    profileGetConfig.mockImplementation(async (_name, key) => key === 'selectedScene' ? 'removed' : undefined);
+    await expect(methods.open()).rejects.toThrow('场景已不可用：removed');
+    expect(messageSend).not.toHaveBeenCalled();
+  });
+
+  it('keeps missing and conflicting selections explicit instead of launching another preset', async () => {
+    /// @case
+    /// 1. A previously selected preset is disabled or contributed by two packages.
+    /// @expect
+    /// The selected ID remains visible, conflicts are explained, and neither selection nor launch silently uses a different preset.
+    const packageInfo = enablePreset('removed-preview', { id: 'removed', module: './dist/preset.cjs' });
+    profileGetConfig.mockResolvedValue('removed');
+    presetContributions.disable(packageInfo);
+    expect((await methods['query-presets']()).selectedPresetId).toBe('removed');
+    await expect(methods.open()).rejects.toThrow('not available');
+    await expect(methods['select-preset']('missing')).rejects.toThrow('not available');
+
+    enablePreset('conflict-a', { id: 'shared', module: './dist/preset.cjs' });
+    enablePreset('conflict-b', { id: 'shared', module: './dist/preset.cjs' });
+    const { presets } = await methods['query-presets']();
+    expect(presets[0]).toMatchObject({ id: 'shared', label: 'shared', unavailableReason: expect.stringContaining('conflict-a') });
+    await expect(methods['select-preset']('shared')).rejects.toThrow('multiple enabled contributors');
+    expect(messageSend).not.toHaveBeenCalled();
+    expect(profileSetConfig).not.toHaveBeenCalled();
     expect(moduleRequireFile).not.toHaveBeenCalled();
   });
 
@@ -843,94 +956,6 @@ describe('Super Preview extension surfaces', () => {
   });
 });
 
-describe('Super Preview toolbar contribution', () => {
-  beforeEach(() => {
-    messageRequest.mockReset();
-  });
-
-  it('declares a built-in-sized play button after the built-in preview group', () => {
-    /// @case
-    /// 1. Vortex loads the extension manifest and middle toolbar contribution.
-    /// 2. The toolbar renders the Super Preview launch control.
-    /// @expect
-    /// The contribution follows built-in preview priority and uses the built-in 24x22 play-button size with SUPER below the toolbar row.
-    const packageJson = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as {
-      contributions?: {
-        toolbar?: {
-          middle?: string;
-          middlePriority?: number;
-        };
-      };
-    };
-
-    expect(packageJson.contributions?.toolbar).toEqual({
-      middle: './dist/contributions/toolbar/index.cjs',
-      middlePriority: 1,
-    });
-    expect(toolbar.template).toContain('value="play"');
-    expect(toolbar.template).toContain('SUPER');
-    expect(toolbar.template).toContain('tooltip="Super Preview"');
-    expect(toolbar.template).toContain('class="super-preview-open transparent"');
-    expect(toolbar.template).toMatch(
-      /<\/ui-button>\s*<span class="super-preview-footnote">SUPER<\/span>/u,
-    );
-    expect(toolbar.style).toMatch(/width:\s*24px/u);
-    expect(toolbar.style).toMatch(/height:\s*22px/u);
-    expect(toolbar.style).toMatch(
-      /\.super-preview-footnote\s*\{[^}]*position:\s*absolute[^}]*top:\s*calc\(100% \+ 1px\)/su,
-    );
-    expect(toolbar.style).not.toMatch(/\.super-preview-open ui-icon[^}]*font-size/u);
-  });
-
-  it('opens once while a toolbar request is pending and recovers after success', async () => {
-    /// @case
-    /// 1. The user clicks the Super Preview toolbar button twice before opening finishes.
-    /// 2. The open request succeeds and the user clicks again.
-    /// @expect
-    /// Only one request runs concurrently, the button is re-enabled, and a later click can open again.
-    const pendingOpen = createDeferred<void>();
-    messageRequest.mockReturnValueOnce(pendingOpen.promise).mockResolvedValueOnce(undefined);
-    const context = createToolbarContext();
-
-    toolbar.ready.call(context as never);
-    context.open.dispatch('click');
-    context.open.dispatch('click');
-
-    expect(messageRequest).toHaveBeenCalledTimes(1);
-    expect(messageRequest).toHaveBeenCalledWith('super-preview', 'open');
-    expect(context.open.hasAttribute('disabled')).toBe(true);
-
-    pendingOpen.resolve();
-    await vi.waitFor(() => expect(context.open.hasAttribute('disabled')).toBe(false));
-
-    context.open.dispatch('click');
-    await vi.waitFor(() => expect(messageRequest).toHaveBeenCalledTimes(2));
-    toolbar.close.call(context as never);
-  });
-
-  it('logs an actionable error and restores the button after an open failure', async () => {
-    /// @case
-    /// 1. The toolbar asks the extension to open Super Preview.
-    /// 2. The extension message rejects.
-    /// @expect
-    /// The error is logged with the extension prefix and the launch button becomes usable again.
-    const error = new Error('preview unavailable');
-    messageRequest.mockRejectedValue(error);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const context = createToolbarContext();
-
-    toolbar.ready.call(context as never);
-    context.open.dispatch('click');
-
-    await vi.waitFor(() => expect(context.open.hasAttribute('disabled')).toBe(false));
-    expect(consoleError).toHaveBeenCalledWith('[Super Preview] Failed to open preview', error);
-    toolbar.close.call(context as never);
-    consoleError.mockRestore();
-  });
-});
-
 function emitBroadcast(name: string, ...args: unknown[]) {
   for (const listener of broadcastListeners.get(name) ?? []) {
     listener(...args);
@@ -947,6 +972,27 @@ async function defaultMessageResponse(
   message: string,
   request?: unknown,
 ) {
+  if (extension === 'super-preview' && message === 'query-presets') {
+    return methods['query-presets']();
+  }
+  if (extension === 'super-preview' && message === 'select-preset') {
+    return methods['select-preset'](request as string | undefined);
+  }
+  if (extension === 'super-preview' && message === 'query-scenes') {
+    return methods['query-scenes']();
+  }
+  if (extension === 'super-preview' && message === 'select-scene') {
+    return methods['select-scene'](request as string);
+  }
+  if (extension === 'asset-db' && message === 'query-assets') {
+    return [
+      { uuid: 'scene-alpha', name: 'Alpha.scene', url: 'db://assets/Alpha.scene', type: 'cc.SceneAsset' },
+      { uuid: 'scene-beta', name: 'Beta.scene', url: 'db://assets/Beta.scene', type: 'cc.SceneAsset' },
+    ];
+  }
+  if (extension === 'asset-db' && message === 'query-asset-info') {
+    return { uuid: request, type: 'cc.SceneAsset' };
+  }
   if (
     extension === 'super-preview'
     && message === 'evaluate-preset-launch-params'
@@ -1014,6 +1060,8 @@ async function invokePresetRoute(request: Request, response: Response) {
 function enablePreset(
   packageName: string,
   preset: {
+    label?: string;
+    description?: string;
     export?: string;
     id: string;
     module: string;
@@ -1119,64 +1167,4 @@ function createResponse() {
     return response;
   });
   return { response, state };
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-}
-
-class FakeToolbarElement {
-  readonly attributes = new Set<string>();
-  readonly listeners = new Map<string, Set<EventListener>>();
-
-  addEventListener(name: string, listener: EventListener) {
-    const listeners = this.listeners.get(name) ?? new Set<EventListener>();
-    listeners.add(listener);
-    this.listeners.set(name, listeners);
-  }
-
-  dispatch(name: string) {
-    const event = {
-      stopPropagation: vi.fn(),
-      type: name,
-    } as unknown as Event;
-    for (const listener of this.listeners.get(name) ?? []) {
-      listener(event);
-    }
-  }
-
-  hasAttribute(name: string) {
-    return this.attributes.has(name);
-  }
-
-  removeAttribute(name: string) {
-    this.attributes.delete(name);
-  }
-
-  removeEventListener(name: string, listener: EventListener) {
-    this.listeners.get(name)?.delete(listener);
-  }
-
-  setAttribute(name: string) {
-    this.attributes.add(name);
-  }
-}
-
-function createToolbarContext() {
-  const root = new FakeToolbarElement();
-  const open = new FakeToolbarElement();
-  return {
-    $: {
-      open: open as unknown as HTMLElement,
-      root: root as unknown as HTMLElement,
-    },
-    open,
-    root,
-  };
 }

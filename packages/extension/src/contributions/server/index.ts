@@ -34,11 +34,11 @@ export const get = [
     handle: handleDefaultPresetRequest,
   },
   {
-    url: /^\/super-preview\/preset-([a-z0-9][a-z0-9-]*)$/u,
+    url: /^\/super-preview\/presets\/([a-z0-9][a-z0-9-]*)$/u,
     handle: handlePresetRequest,
   },
   {
-    url: /^\/super-preview(?:\/preset-[a-z0-9][a-z0-9-]*)?\/manifest\.webmanifest$/u,
+    url: /^\/super-preview(?:\/presets\/[a-z0-9][a-z0-9-]*)?\/manifest\.webmanifest$/u,
     handle: sendWebAppManifest,
   },
   {

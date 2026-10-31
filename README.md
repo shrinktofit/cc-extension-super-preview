@@ -15,28 +15,50 @@ project-level configuration.
 - `node --run test`
 - `node --run publish -- --dry-run`
 
+The extension's toolbar uses Vortex UI Elements and the shared editor theme. For local
+development, their packages are linked from the adjacent `vortex-collection/vortex`
+checkout. Build those packages before building this extension; Vite bundles them into
+the extension output, so the installed extension does not need those source paths.
+
 ## Usage
 
 The normal browser preview button and shortcut continue to open the built-in
 preview. A separate play button with a **SUPER** footnote appears to the right of
 the built-in preview controls. That button and **Project > Super Preview** open
-the stable `/super-preview` route on the editor preview server.
+the selected preset on the editor preview server, or `/super-preview` for the
+default selection.
 
-Super Preview shares the built-in scene selector. Selecting a scene there affects
-both preview entry points without replacing the built-in preview page.
+Two Vortex Select controls appear beside SUPER: presets on the left and scenes on
+the right. The preset picker always includes **无预设** (no preset) and searches names
+and preset IDs. The scene picker always includes **当前场景** (current scene), followed
+by scene assets; search matches names and asset paths. Scene paths appear in the
+popup to distinguish identical names. Both pickers use the editor theme and support
+keyboard navigation with Enter to confirm and Escape to cancel.
+
+Each selection is remembered separately in the project's local Super Preview user
+profile. Changing one does not change or lock the other, open a preview, or evaluate
+a preset callback. Current scene remains a live selection of the scene being edited.
+Scene assets refresh when the picker opens or the asset database changes. Missing
+selected scenes and missing or conflicting presets remain visible as unavailable
+until another option is selected.
+
+Press SUPER or use the Project menu to launch. A preset's own scene takes priority;
+if it does not provide one, Super Preview uses the right-hand scene selection.
+Without a preset it uses that selection directly. The built-in preview's scene
+selection and profile are independent of Super Preview.
 
 URL parameters starting with `--` select Super Preview options. All other URL
 parameters pass to the game with their original names and string values,
 overriding matching preset `launchParams`. For example:
 
 ```text
-/super-preview/preset-example?--scene=scene-uuid&serverPort=12500&scene=lobby
+/super-preview/presets/example?--scene=scene-uuid&serverPort=12500&scene=lobby
 ```
 
 This loads `scene-uuid` and gives the game `serverPort: '12500'` and
 `scene: 'lobby'`. Preview options stay in the shell's internal configuration.
 The launch scene comes from URL `--scene`, the preset's top-level `scene`,
-the editor's preview profile, or `current_scene`, in that order. Game code can
+Super Preview's saved scene selection, or `current_scene`, in that order. Game code can
 read its effective launch parameters through the preview-only virtual module:
 
 ```ts
@@ -65,6 +87,8 @@ An extension can contribute a request-time preset:
       "presets": [
         {
           "id": "example",
+          "label": "Local development",
+          "description": "Connect to the local development server",
           "module": "./dist/example.cjs"
         }
       ]
@@ -73,7 +97,7 @@ An extension can contribute a request-time preset:
 }
 ```
 
-Opening `/super-preview/preset-example` loads the module's default export. A
+Opening `/super-preview/presets/example` loads the module's default export. A
 declaration may set `"export": "createPreset"` to select a named export instead.
 The callback receives the current `projectPath` and `requestUrl`, and returns
 a Super Preview scene beside string-valued launch parameters:
@@ -89,6 +113,11 @@ export default async function createPreset({ projectPath, requestUrl }) {
 }
 ```
 
+`label` and `description` are optional static menu metadata. Without `label`, the
+picker displays the preset ID. Listing presets never loads their modules; only
+requesting a preset preview evaluates its callback. Changing the toolbar selection
+does not change existing preview URLs or browser tabs.
+
 The callback runs for every request. The sibling `scene` is a Super Preview
 control field. An explicit `?--scene=other-scene` overrides it for that request,
 but is not exposed through the `super-preview` runtime module. Every key inside
@@ -100,7 +129,7 @@ Supported preview options:
 
 | Parameter | Behavior | Default |
 | --- | --- | --- |
-| `--scene` | Launch scene UUID or `current_scene` | Preset, editor profile, then `current_scene` |
+| `--scene` | Launch scene UUID or `current_scene` | Preset, Super Preview scene selection, then `current_scene` |
 | `--splashPreview` | Preserve the project's splash duration | `false` |
 | `--debug` | Enable engine INFO logging (`false` selects NONE) | `true` |
 | `--superPreviewDebug` | Enable preview diagnostic console logging | localStorage `super-preview.debug === '1'` |
@@ -125,6 +154,10 @@ shortens it to about 50 ms. Open `/super-preview?--splashPreview=true` to preser
 the splash duration configured by the project.
 
 ## URL migration
+
+As of 0.0.6, preset URLs use `/super-preview/presets/:id`. Replace existing
+`/super-preview/preset-example` links with `/super-preview/presets/example`.
+The old preset route is no longer served; `/super-preview` remains unchanged.
 
 This changes the URL parameter namespace directly. Update existing links:
 

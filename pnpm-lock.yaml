@@ -90,9 +90,24 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.0
+      '@vitejs/plugin-vue':
+        specifier: 'catalog:'
+        version: 5.2.4(vite@6.4.3(@types/node@22.20.0))(vue@3.5.39(typescript@5.9.3))
+      '@vortex/editor-theme':
+        specifier: link:../../../../vortex-collection/vortex/packages/vortex-editor-theme
+        version: link:../../../../vortex-collection/vortex/packages/vortex-editor-theme
+      '@vortex/ui-elements':
+        specifier: link:../../../../vortex-collection/vortex/packages/vortex-ui-elements
+        version: link:../../../../vortex-collection/vortex/packages/vortex-ui-elements
+      '@vortex/ui-elements-vue':
+        specifier: link:../../../../vortex-collection/vortex/packages/vortex-ui-elements-vue
+        version: link:../../../../vortex-collection/vortex/packages/vortex-ui-elements-vue
       express:
         specifier: 'catalog:'
         version: 5.3.0
+      happy-dom:
+        specifier: ^20.0.0
+        version: 20.14.6
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -101,7 +116,13 @@ importers:
         version: 6.4.3(@types/node@22.20.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.0)
+        version: 3.2.7(@types/node@22.20.0)(happy-dom@20.14.6)
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.39(typescript@5.9.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 2.2.12(typescript@5.9.3)
 
   packages/preview-shell:
     devDependencies:
@@ -131,7 +152,7 @@ importers:
         version: 6.4.3(@types/node@22.20.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.0)
+        version: 3.2.7(@types/node@22.20.0)(happy-dom@20.14.6)
       vue:
         specifier: 'catalog:'
         version: 3.5.39(typescript@5.9.3)
@@ -626,6 +647,12 @@ packages:
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+
   '@typescript-eslint/eslint-plugin@8.62.0':
     resolution: {integrity: sha512-o+mpz7EYiMzXoySXiKmzlabIvTVqUuK5yLrAedRPRDA0IpPFMUV1IXt6OqljIxX/kumN6EjUYp41Hqelh6p/Dw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -844,6 +871,10 @@ packages:
     resolution: {integrity: sha512-MTc8i/x9jBQd1iMw2CFGS+rwMa07eYjLR0CCTLDACl9xhxy+nIs3KeML/biicXtk9JrZ6dnnTatmc7ErPXIxqw==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
+
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
 
   builtin-modules@5.3.0:
     resolution: {integrity: sha512-hMQUl2bUFG339QygPM97E+mc8OY1IAchORZxm4a/frcYwKzozMzRVDBwHW0NjOqGElLm2O37AVQE8ikxlZHrMQ==}
@@ -1234,6 +1265,10 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  happy-dom@20.14.6:
+    resolution: {integrity: sha512-5DDsf4QmEIlRL6NkCv/fxSjYHHkZceL/IaYQdJc2h3G7DRTEai++VTjbfL0LB9geW2VrA3+vrjF3Efx+OTtX0Q==}
+    engines: {node: '>=20.0.0'}
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -1803,6 +1838,10 @@ packages:
       typescript:
         optional: true
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
@@ -1819,6 +1858,18 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
+
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   xml-name-validator@4.0.0:
     resolution: {integrity: sha512-ICP2e+jsHvAj2E2lIHxa5tjXRlKDJo4IdvPvCXbXQGdzSfmSpNVyIKMvoZHjDY9DP0zV17iI85o90vRFXNccRw==}
@@ -2179,6 +2230,12 @@ snapshots:
       '@types/http-errors': 2.0.5
       '@types/node': 22.20.0
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 22.20.0
+
   '@typescript-eslint/eslint-plugin@8.62.0(@typescript-eslint/parser@8.62.0(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
@@ -2477,6 +2534,10 @@ snapshots:
       electron-to-chromium: 1.5.380
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 22.20.0
 
   builtin-modules@5.3.0: {}
 
@@ -2913,6 +2974,19 @@ snapshots:
   gopd@1.2.0: {}
 
   graceful-fs@4.2.11: {}
+
+  happy-dom@20.14.6:
+    dependencies:
+      '@types/node': 22.20.0
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.22.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   has-flag@4.0.0: {}
 
@@ -3401,7 +3475,7 @@ snapshots:
       '@types/node': 22.20.0
       fsevents: 2.3.3
 
-  vitest@3.2.7(@types/node@22.20.0):
+  vitest@3.2.7(@types/node@22.20.0)(happy-dom@20.14.6):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
@@ -3428,6 +3502,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.0
+      happy-dom: 20.14.6
     transitivePeerDependencies:
       - jiti
       - less
@@ -3472,6 +3547,8 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
+  whatwg-mimetype@3.0.0: {}
+
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
@@ -3484,6 +3561,8 @@ snapshots:
   word-wrap@1.2.5: {}
 
   wrappy@1.0.2: {}
+
+  ws@8.22.1: {}
 
   xml-name-validator@4.0.0: {}
 

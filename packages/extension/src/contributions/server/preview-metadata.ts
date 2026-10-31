@@ -6,6 +6,7 @@ import type { LaunchParams, PreviewOptions } from '../../launch-params.js';
 import { logger } from '../../logger.js';
 import { writeServerDiagnosticLog } from './diagnostic-log.js';
 import { queryEnginePreviewRoot } from './engine-preview.js';
+import { currentScene } from '../../scene-protocol.js';
 import type { Request } from 'express';
 
 export interface PreviewMetadata {
@@ -111,10 +112,10 @@ async function selectLaunchScene(scene: string | undefined) {
   const requestedScene = scene?.trim();
   const configuredScene = requestedScene
     ? undefined
-    : await Editor.Profile.getConfig('preview', 'general.start_scene');
+    : await Editor.Profile.getConfig('super-preview', 'selectedScene', 'local');
   return requestedScene
     || (typeof configuredScene === 'string' && configuredScene.trim())
-    || 'current_scene';
+    || currentScene;
 }
 
 function createPreviewServerResources(

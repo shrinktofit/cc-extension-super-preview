@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { builtinModules } from 'node:module';
+import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 
 function defineEntries(files: string[]) {
@@ -20,6 +21,24 @@ const entries = defineEntries([
 ]);
 
 export default defineConfig({
+  plugins: [vue({
+    template: {
+      compilerOptions: {
+        isCustomElement: (tag) => tag.startsWith('ui-'),
+      },
+    },
+  })],
+  define: {
+    __VUE_OPTIONS_API__: false,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+  },
+  resolve: {
+    dedupe: ['vue'],
+    alias: {
+      '@vortex/vue3': 'vue',
+    },
+  },
   build: {
     outDir: './dist',
     emptyOutDir: true,
