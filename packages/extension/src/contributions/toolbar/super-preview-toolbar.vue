@@ -5,6 +5,7 @@ import { VortexSelect } from '@vortex/ui-elements-vue';
 import type { VortexSelectChangeDetail, VortexSelectValue } from '@vortex/ui-elements';
 import type { PresetSelection, PresetSummary } from '../../preset-protocol.js';
 import { currentScene, type SceneSelection, type SceneSummary } from '../../scene-protocol.js';
+import PreviewQrcode from './preview-qrcode.vue';
 
 const presetState = shallowRef<PresetSelection>({ presets: [] });
 const sceneState = shallowRef<SceneSelection>({ scenes: [], selectedScene: currentScene });
@@ -234,5 +235,6 @@ onBeforeUnmount(() => {
         </span>
       </template>
     </VortexSelect>
+    <PreviewQrcode :disabled="launchDisabled" />
   </div>
 </template>

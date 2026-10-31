@@ -15,7 +15,7 @@
     "registry": "http://exm.bluesquall.local/",
     "registryPackageName": "@bsgames/extension-super-preview"
   },
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "type": "module",
   "package_version": 2,
@@ -38,6 +38,18 @@
       }
     ],
     "messages": {
+      "query-preview-url": {
+        "methods": [
+          "query-preview-url"
+        ],
+        "public": false
+      },
+      "copy-preview-url": {
+        "methods": [
+          "copy-preview-url"
+        ],
+        "public": false
+      },
       "query-presets": {
         "methods": [
           "query-presets"

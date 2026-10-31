@@ -97,7 +97,7 @@ export const methods = {
     }
   },
 
-  async open() {
+  async 'query-preview-url'() {
     const selectedPresetId = await Editor.Profile.getConfig('super-preview', 'selectedPresetId', 'local') as string | undefined;
     if (selectedPresetId) {
       assertPresetAvailable(selectedPresetId);
@@ -113,7 +113,15 @@ export const methods = {
       ? `/${superPreviewRoutePrefix}/presets/${selectedPresetId}`
       : `/${superPreviewRoutePrefix}`;
     const previewUrl = new URL(previewPath, `${previewBaseUrl.replace(/\/+$/u, '')}/`);
-    Editor.Message.send('program', 'open-url', previewUrl.href);
+    return previewUrl.href;
+  },
+
+  async open() {
+    Editor.Message.send('program', 'open-url', await methods['query-preview-url']());
+  },
+
+  'copy-preview-url'(url: string) {
+    Editor.Clipboard.write('text', url);
   },
 };
 

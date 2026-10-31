@@ -25,6 +25,7 @@ interface ResponseState {
 
 const messageRequest = vi.fn();
 const messageSend = vi.fn();
+const clipboardWrite = vi.fn();
 const profileGetConfig = vi.fn();
 const profileSetConfig = vi.fn();
 const moduleRemoveCache = vi.fn();
@@ -43,6 +44,7 @@ const removeBroadcastListener = vi.fn((name: string, listener: (...args: unknown
 });
 
 vi.stubGlobal('Editor', {
+  Clipboard: { write: clipboardWrite },
   Message: {
     __protected__: {
       addBroadcastListener,
@@ -80,6 +82,7 @@ describe('Super Preview extension surfaces', () => {
     removeBroadcastListener.mockClear();
     messageRequest.mockReset();
     messageSend.mockReset();
+    clipboardWrite.mockReset();
     moduleRemoveCache.mockReset();
     moduleRequireFile.mockReset();
     profileGetConfig.mockReset();
@@ -752,11 +755,15 @@ describe('Super Preview extension surfaces', () => {
     await methods['select-preset']('full-flow');
     expect(profileSetConfig).toHaveBeenCalledWith('super-preview', 'selectedPresetId', 'full-flow', 'local');
     expect((await methods['query-presets']()).selectedPresetId).toBe('full-flow');
+    expect(await methods['query-preview-url']()).toBe('https://preview.test/super-preview/presets/full-flow');
+    expect(messageSend).not.toHaveBeenCalled();
+    expect(moduleRequireFile).not.toHaveBeenCalled();
     await methods.open();
     expect(messageSend).toHaveBeenLastCalledWith('program', 'open-url', 'https://preview.test/super-preview/presets/full-flow');
     expect(moduleRequireFile).not.toHaveBeenCalled();
 
     await methods['select-preset']();
+    expect(await methods['query-preview-url']()).toBe('https://preview.test/super-preview');
     await methods.open();
     expect(messageSend).toHaveBeenLastCalledWith('program', 'open-url', 'https://preview.test/super-preview');
     expect((await methods['query-presets']()).selectedPresetId).toBeUndefined();
@@ -856,6 +863,16 @@ describe('Super Preview extension surfaces', () => {
       'open-url',
       'https://preview.test:7456/super-preview',
     );
+  });
+
+  it('copies the displayed preview URL through the main process without launching', () => {
+    /// @case The toolbar requests copying a complete URL with a preset and query parameters.
+    /// @expect The main process writes exactly that string to the clipboard without opening preview or evaluating a preset.
+    const url = 'https://preview.test:7456/super-preview/presets/full-flow?level=2&token=a%26b';
+    methods['copy-preview-url'](url);
+    expect(clipboardWrite).toHaveBeenCalledWith('text', url);
+    expect(messageSend).not.toHaveBeenCalled();
+    expect(moduleRequireFile).not.toHaveBeenCalled();
   });
 
   it('serves the extension map and rejects unsafe shell asset paths', async () => {

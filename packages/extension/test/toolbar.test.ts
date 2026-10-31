@@ -1,21 +1,43 @@
 // @vitest-environment happy-dom
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, type App } from 'vue';
 import type { VortexSelectProps } from '@vortex/ui-elements';
 import type { PresetSelection, PresetSummary } from '../src/preset-protocol.js';
 import type { SceneSelection, SceneSummary } from '../src/scene-protocol.js';
 import * as toolbar from '../src/contributions/toolbar/index.js';
 
+// Happy DOM connects slotted custom elements before their parent's Vue instance exists.
+// Icon rendering is covered in Chromium; keep the real buttons, selects and QR component here.
+vi.mock('@vortex/ui-elements-vue', async (importOriginal) => {
+  const components = await importOriginal<typeof import('@vortex/ui-elements-vue')>();
+  const { h } = await import('vue');
+  return {
+    ...components,
+    VortexIcon: { props: ['value'], render: () => h('span') },
+  };
+});
+
 type SelectElement<Option> = HTMLElement & VortexSelectProps<Option>;
 const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 const request = vi.fn();
+const clipboardWrite = vi.fn();
 const mounted: { $: { root: HTMLElement }; app?: App }[] = [];
 let presets: PresetSummary[];
 let scenes: SceneSummary[];
 let savedPresetId: string | undefined;
 let savedScene: string;
+let previewOrigin: string;
+
+// Happy DOM has no popover implementation; real dismissal and positioning are verified in Chromium.
+beforeAll(() => {
+  Object.defineProperties(HTMLElement.prototype, {
+    showPopover: { configurable: true, value() {} },
+    hidePopover: { configurable: true, value() {} },
+  });
+});
 
 vi.stubGlobal('Editor', {
+  Clipboard: { write: clipboardWrite },
   Message: {
     request,
     __protected__: {
@@ -35,6 +57,8 @@ beforeEach(() => {
   listeners.clear();
   savedPresetId = undefined;
   savedScene = 'current_scene';
+  previewOrigin = 'http://192.168.1.10:7456';
+  clipboardWrite.mockClear();
   presets = [{ id: 'local', label: '本地联调', description: '连接本地服务' }];
   scenes = [
     { uuid: 'scene-alpha', label: 'Alpha', url: 'db://assets/Alpha.scene' },
@@ -45,6 +69,8 @@ beforeEach(() => {
     switch (message) {
     case 'query-presets': return { presets, selectedPresetId: savedPresetId };
     case 'query-scenes': return { scenes, selectedScene: savedScene };
+    case 'query-preview-url': return previewOrigin + '/super-preview' + (savedPresetId ? '/presets/' + savedPresetId : '');
+    case 'copy-preview-url': return;
     case 'select-preset':
       savedPresetId = value;
       return;
@@ -63,9 +89,102 @@ afterEach(async () => {
   await nextTick();
   vi.restoreAllMocks();
 });
-afterAll(() => vi.unstubAllGlobals());
+afterAll(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, 'showPopover');
+  Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover');
+  vi.unstubAllGlobals();
+});
 
 describe('Super Preview toolbar mounted through Vue and VortexSelect', () => {
+  it('shares and copies the selected preview URL without launching or evaluating a preset', async () => {
+    /// @case Open the QR popup, change the preset and network address, then copy the link.
+    /// @expect The code and clipboard contain the latest complete URL; opening the popup has no launch side effects.
+    const context = await mountToolbar();
+    expect(request).not.toHaveBeenCalledWith('super-preview', 'query-preview-url');
+    context.share.click();
+    const code = () => context.$.root.querySelector('vortex-qrcode') as HTMLElement & { value: string };
+    await vi.waitFor(() => expect(code()?.value).toBe(previewOrigin + '/super-preview'));
+    savedPresetId = 'local';
+    broadcast('super-preview:presets-changed');
+    await vi.waitFor(() => expect(code()?.value).toBe(previewOrigin + '/super-preview/presets/local'));
+    previewOrigin = 'https://192.168.1.20:8080';
+    broadcast('preview:ip-change');
+    await vi.waitFor(() => expect(code()?.value).toBe(previewOrigin + '/super-preview/presets/local'));
+    const copy = context.$.root.querySelector('.super-preview-copy-url')?.shadowRoot?.querySelector('button');
+    copy!.click();
+    await vi.waitFor(() => expect(request).toHaveBeenCalledWith(
+      'super-preview', 'copy-preview-url', previewOrigin + '/super-preview/presets/local',
+    ));
+    expect(clipboardWrite).not.toHaveBeenCalled();
+    await nextTick();
+    expect(context.$.root.textContent).toContain('已复制预览地址');
+    expect(request.mock.calls.some(([, message]) => message === 'open' || message === 'evaluate-preset-launch-params')).toBe(false);
+  });
+
+  it('discards outdated URL responses and closes when the selected target becomes unavailable', async () => {
+    /// @case Network changes trigger overlapping requests; then the selected scene is removed.
+    /// @expect Only the latest response is encoded, and an unavailable target disables and closes sharing.
+    const context = await mountToolbar();
+    context.share.click();
+    const code = () => context.$.root.querySelector('vortex-qrcode') as HTMLElement & { value: string };
+    await vi.waitFor(() => expect(code()?.value).toBe(previewOrigin + '/super-preview'));
+    const older = deferred<string>();
+    const newer = deferred<string>();
+    request.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    broadcast('preview:ip-change');
+    broadcast('preview:port-change');
+    newer.resolve('https://new.test:8080/super-preview');
+    await vi.waitFor(() => expect(code()?.value).toBe('https://new.test:8080/super-preview'));
+    older.resolve('http://old.test/super-preview');
+    await older.promise;
+    await nextTick();
+    expect(code().value).toBe('https://new.test:8080/super-preview');
+    savedScene = 'removed';
+    broadcast('super-preview:scenes-changed');
+    await vi.waitFor(() => expect(context.share.disabled).toBe(true));
+    expect(context.$.root.querySelector('.super-preview-qrcode-trigger')?.getAttribute('aria-expanded')).toBe('false');
+    request.mockClear();
+    context.share.click();
+    broadcast('preview:port-change');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('keeps the code visible and allows retrying when copying fails', async () => {
+    /// @case The main process rejects copying, then accepts a retry.
+    /// @expect Failed copying is reported without discarding the code or claiming success.
+    const context = await mountToolbar();
+    context.share.click();
+    await vi.waitFor(() => expect(context.$.root.querySelector('vortex-qrcode')).not.toBeNull());
+    const error = new Error('Clipboard unavailable');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    request.mockRejectedValueOnce(error);
+    const copy = context.$.root.querySelector('.super-preview-copy-url')!.shadowRoot!.querySelector('button')!;
+    copy.click();
+    await vi.waitFor(() => expect(context.$.root.textContent).toContain('复制失败，请重试'));
+    expect(context.$.root.querySelector('vortex-qrcode')).not.toBeNull();
+    expect(logged).toHaveBeenCalledWith('[Super Preview] Failed to copy preview URL', error);
+    copy.click();
+    await vi.waitFor(() => expect(context.$.root.textContent).toContain('已复制预览地址'));
+  });
+
+  it('clears an old code and reports a failed URL refresh', async () => {
+    /// @case Refreshing an open QR popup fails after it previously displayed a valid URL.
+    /// @expect The old code is removed, the failure is visible, and closing and reopening can retry.
+    const context = await mountToolbar();
+    context.share.click();
+    await vi.waitFor(() => expect(context.$.root.querySelector('vortex-qrcode')).not.toBeNull());
+    const error = new Error('Preview server unavailable');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    request.mockRejectedValueOnce(error);
+    broadcast('preview:port-change');
+    await vi.waitFor(() => expect(context.$.root.querySelector('[role="alert"]')?.textContent).toContain('无法获取预览地址'));
+    expect(context.$.root.querySelector('vortex-qrcode')).toBeNull();
+    expect(logged).toHaveBeenCalledWith('[Super Preview] Failed to query preview URL', error);
+    context.share.click();
+    context.share.click();
+    await vi.waitFor(() => expect(context.$.root.querySelector('vortex-qrcode')).not.toBeNull());
+  });
+
   it('persists a preset without launching and restores it after remounting', async () => {
     /// @case Select a preset, remount the contribution, then play and return to no preset.
     /// @expect Selection persists; only explicit play opens preview and selection never evaluates presets.
@@ -304,7 +423,8 @@ async function mountToolbar() {
     expect(preset.hasAttribute('disabled')).toBe(false);
     expect(scene.hasAttribute('disabled')).toBe(false);
   });
-  return Object.assign(context, { preset, scene, open });
+  const share = root.querySelector('.super-preview-qrcode-trigger')!.shadowRoot!.querySelector('button')!;
+  return Object.assign(context, { preset, scene, open, share });
 }
 
 function choose<Option>(control: SelectElement<Option>, value: string) {

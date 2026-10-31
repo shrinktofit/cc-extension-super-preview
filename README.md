@@ -47,6 +47,12 @@ if it does not provide one, Super Preview uses the right-hand scene selection.
 Without a preset it uses that selection directly. The built-in preview's scene
 selection and profile are independent of Super Preview.
 
+The QR button beside the scene picker shares the same complete URL as SUPER.
+Its popup displays a scannable code and a copy button. Opening it does not launch
+preview or evaluate a preset; the callback runs when the link is visited. The
+popup refreshes when the preset, scene selection, preview IP, or port changes.
+Click outside, press Escape, or click the QR button again to dismiss it.
+
 URL parameters starting with `--` select Super Preview options. All other URL
 parameters pass to the game with their original names and string values,
 overriding matching preset `launchParams`. For example:

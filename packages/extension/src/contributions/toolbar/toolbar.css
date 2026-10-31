@@ -73,3 +73,61 @@
   color: var(--vortex-color-text-muted);
   font-size: 11px;
 }
+
+.super-preview-share {
+  display: flex;
+  flex: none;
+}
+
+.super-preview-share-popover {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--vortex-color-border-strong);
+  border-radius: var(--vortex-control-radius);
+  background: var(--vortex-color-surface-raised);
+  color: var(--vortex-color-text);
+  font: inherit;
+  font-size: var(--vortex-font-size);
+  text-align: center;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.super-preview-share-popover:popover-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.super-preview-share-address {
+  /* The image sets the width; wrapping is allowed inside the URL, before its copy button. */
+  contain: inline-size;
+  align-self: stretch;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.super-preview-share-url {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.super-preview-copy-url {
+  --vortex-button-small-height: 18px;
+  --vortex-button-icon-size: 12px;
+  --vortex-button-icon-glyph-size: 12px;
+  margin-inline-start: 3px;
+  vertical-align: middle;
+}
+
+.super-preview-share-hint {
+  color: var(--vortex-color-text-muted);
+}

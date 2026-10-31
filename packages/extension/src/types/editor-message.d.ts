@@ -8,6 +8,14 @@ import type { SceneSelection } from '../scene-protocol.js';
 declare global {
   interface EditorMessageMaps {
     'super-preview': {
+      'query-preview-url': {
+        params: [];
+        result: string;
+      };
+      'copy-preview-url': {
+        params: [url: string];
+        result: void;
+      };
       'query-presets': {
         params: [];
         result: PresetSelection;
