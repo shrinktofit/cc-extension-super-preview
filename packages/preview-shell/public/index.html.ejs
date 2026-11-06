@@ -27,12 +27,14 @@
 <body>
   <div id="super-preview-shell"></div>
 
-  <script id="super-preview-config" type="application/json"><%- configJson %></script>
-  <script type="importmap"><%- runtimeImportMapJson %></script>
+  <script id="super-preview-config" type="application/json">
+<%- configJson %>
+  </script>
+  <script type="importmap">
+<%- runtimeImportMapJson %>
+  </script>
   <script src="<%= polyfillsUrl %>"></script>
-<% if (!engineImportGuide) { -%>
-  <script src="<%= engineImportMapUrl %>" type="systemjs-importmap"></script>
-<% } -%>
+
   <script src="<%= packImportMapUrl %>" type="systemjs-importmap"></script>
   <script src="<%= globalImportMapUrl %>" type="systemjs-importmap"></script>
   <script type="systemjs-importmap"><%- runtimeSystemImportMapJson %></script>
@@ -50,9 +52,7 @@
       });
     });
   </script>
-<% if (!engineImportGuide) { -%>
-  <script src="<%= engineBundleUrl %>"></script>
-<% } -%>
+
   <script name="setting" src="<%= settingsJsUrl %>"></script>
   <script type="module" src="<%= bootScriptUrl %>"></script>
 </body>

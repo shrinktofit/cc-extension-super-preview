@@ -26,6 +26,17 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
     for (const route of get) {
       app.get(route.url, route.handle);
     }
+    app.get('/scripting/engine/development/session', (_request, response) => {
+      response.json({ importMapURL: '/scripting/engine/development/test/import-map' });
+    });
+    app.get('/scripting/engine/development/test/import-map', (_request, response) => {
+      response.json({
+        imports: {
+          cc: '/scripting/engine/development/test/cc.mjs',
+          'cc/env': '/scripting/engine/development/test/env.mjs',
+        },
+      });
+    });
     server = app.listen(0, '127.0.0.1');
     await new Promise<void>((accept) => server.once('listening', accept));
     const address = server.address();
@@ -104,9 +115,8 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
       const page = await fetch(`${origin}/super-preview`);
       expect(page.status).toBe(200);
       const html = await page.text();
-      for (const name of ['import-map.json', 'bundled/index.js']) {
-        expect(html).toContain(`${origin}/super-preview/engine/${name}`);
-      }
+      expect(html).toContain('"cc": "/scripting/engine/development/test/cc.mjs"');
+      expect(html).not.toContain(`${origin}/super-preview/engine/bundled/index.js`);
       const importMapUrl = `${origin}/super-preview/engine/import-map.json`;
       const importMapResponse = await fetch(importMapUrl);
       expect(importMapResponse.status).toBe(200);
@@ -154,11 +164,8 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
     expect(manifest.status).toBe(200);
     expect(await manifest.json()).toMatchObject({ start_url: previewPath, scope: '/super-preview' });
     expect(messageRequest).not.toHaveBeenCalled();
-    const bundleUrl = html.match(/<script src="([^"]+\/engine\/bundled\/index.js)">/u)?.[1];
-    expect(bundleUrl).toBeDefined();
-    const bundle = await fetch(bundleUrl!);
-    expect(bundle.status).toBe(200);
-    expect(await bundle.text()).toBe('preset engine');
+    expect(html).toContain('"cc": "/scripting/engine/development/test/cc.mjs"');
+    expect(html).not.toContain('/engine/bundled/index.js');
   });
 
   it('uses an explicit preview output without requiring a source path and follows output changes', async () => {
@@ -177,32 +184,21 @@ describe('Engine preview resources served through Super Preview HTTP routes', ()
     }
   });
 
-  it.each([true, false])('loads ImportGuide output with the editor module profile and DEBUG=%s', async (debug) => {
+  it.each([true, false])('inlines the engine import map with the editor preview environment and DEBUG=%s', async (debug) => {
     /// @case
-    /// 1. The editor supplies an independent preview output containing import-guide.js instead of a legacy bundle and import map.
-    /// 2. The page requests the current HTML5 preview feature profile with the selected debug option.
+    /// 1. The editor serves a universal ESM engine output through its development session route.
+    /// 2. The page requests DEBUG=%s aligned with the preview option.
     /// @expect
-    /// The shell embeds the ImportGuide URL and environment without requesting nonexistent legacy artifacts.
-    const previewRoot = join(workspace, 'guide-preview');
-    await mkdir(previewRoot);
-    await writeFile(join(previewRoot, 'import-guide.js'), 'export class ImportGuide {}');
-    messageRequest.mockImplementation((_extension: string, message: string) => Promise.resolve(
-      message === 'query-engine-info'
-        ? { outputs: { preview: previewRoot } }
-        : { includeModules: ['base', 'gfx-webgl'] },
-    ));
+    /// The shell inlines the engine import map and configures boot to import the engine natively.
     const page = await fetch(`${origin}/super-preview?--debug=${debug}`);
     expect(page.status).toBe(200);
     const html = await page.text();
-    expect(html).not.toContain('/engine/import-map.json');
+    expect(html).not.toContain('/engine/import-guide.js');
     expect(html).not.toContain('/engine/bundled/index.js');
+    expect(html).toContain('"cc": "/scripting/engine/development/test/cc.mjs"');
     const embedded = html.match(/<script id="super-preview-config" type="application\/json">([\s\S]*?)<\/script>/u)?.[1];
-    expect(JSON.parse(embedded!).boot.engineImportGuide).toEqual({
-      url: `${origin}/scripting/engine/import-guide.js`,
-      options: { platform: 'HTML5', mode: 'PREVIEW', features: ['base', 'gfx-webgl'], flags: { DEBUG: debug } },
-    });
-    expect(messageRequest).toHaveBeenCalledWith('engine', 'query-engine-modules-profile', undefined, {
-      platform: 'HTML5', mode: 'PREVIEW', flags: { DEBUG: debug },
+    expect(JSON.parse(embedded!).boot.engineSession).toEqual({
+      importMapURL: `${origin}/scripting/engine/development/test/import-map`,
     });
   });
 

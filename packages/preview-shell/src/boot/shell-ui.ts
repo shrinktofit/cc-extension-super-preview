@@ -2,8 +2,10 @@ import { createApp } from 'vue';
 import PreviewShell from '../preview-shell.vue';
 import { toErrorInfo } from './error-tools';
 import type { ErrorInfo } from './error-tools';
+import type { PreviewHost } from './preview-host';
 
 interface PreviewShellComponent {
+  getPreviewHost: () => PreviewHost;
   hideSplash: () => void;
   reportBootStage: (stage: string) => void;
   reportLoadProgress: (finished: number, total: number) => void;
@@ -14,6 +16,10 @@ interface PreviewShellComponent {
 export class PreviewShellUi {
   constructor(host: HTMLElement) {
     this._component = createApp(PreviewShell).mount(host) as unknown as PreviewShellComponent;
+  }
+
+  getPreviewHost() {
+    return this._component.getPreviewHost();
   }
 
   hideSplash() {

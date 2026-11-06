@@ -118,7 +118,7 @@ describe('Super Preview toolbar mounted through Vue and VortexSelect', () => {
     expect(clipboardWrite).not.toHaveBeenCalled();
     await nextTick();
     expect(context.$.root.textContent).toContain('已复制预览地址');
-    expect(request.mock.calls.some(([, message]) => message === 'open' || message === 'evaluate-preset-launch-params')).toBe(false);
+    expect(request.mock.calls.some((call: unknown[]) => call[1] === 'open' || call[1] === 'evaluate-preset-launch-params')).toBe(false);
   });
 
   it('discards outdated URL responses and closes when the selected target becomes unavailable', async () => {
@@ -194,7 +194,7 @@ describe('Super Preview toolbar mounted through Vue and VortexSelect', () => {
     await vi.waitFor(() => expect(savedPresetId).toBe('local'));
     await vi.waitFor(() => expect(first.preset.hasAttribute('disabled')).toBe(false));
     expect(first.preset.value).toBe('local');
-    expect(request.mock.calls.some(([, message]) => message === 'open' || message === 'evaluate-preset-launch-params')).toBe(false);
+    expect(request.mock.calls.some((call: unknown[]) => call[1] === 'open' || call[1] === 'evaluate-preset-launch-params')).toBe(false);
     toolbar.close.call(first);
 
     const second = await mountToolbar();
@@ -265,7 +265,7 @@ describe('Super Preview toolbar mounted through Vue and VortexSelect', () => {
     await vi.waitFor(() => expect(savedScene).toBe('scene-beta'));
     await vi.waitFor(() => expect(context.scene.hasAttribute('disabled')).toBe(false));
     const pending = deferred<void>();
-    request.mockImplementationOnce(async (_extension, _message, value) => {
+    request.mockImplementationOnce(async (_extension: string, _message: string, value: string | undefined) => {
       await pending.promise;
       savedPresetId = value;
     });
@@ -284,7 +284,7 @@ describe('Super Preview toolbar mounted through Vue and VortexSelect', () => {
     choose(reopened.scene, 'current_scene');
     await vi.waitFor(() => expect(savedScene).toBe('current_scene'));
     expect(reopened.preset.value).toBe('local');
-    expect(request.mock.calls.some(([, message]) => message === 'open' || message === 'evaluate-preset-launch-params')).toBe(false);
+    expect(request.mock.calls.some((call: unknown[]) => call[1] === 'open' || call[1] === 'evaluate-preset-launch-params')).toBe(false);
   });
 
   it('renders scene slot content and reacts to renamed and removed assets', async () => {

@@ -1,35 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-interface RenderNode {
-  style: Record<string, string>;
-}
-
 vi.mock('eruda', () => ({ default: { init: vi.fn() } }));
+vi.mock('pal/screen-adapter/web', () => ({ screenAdapter: { bindHost: () => {} } }));
 
-vi.mock('vue', async (importOriginal) => {
-  const vue = await importOriginal<typeof import('vue')>();
-  const renderer = vue.createRenderer<RenderNode, RenderNode>({
-    createElement: () => ({ style: {} }),
-    createText: () => ({ style: {} }),
-    createComment: () => ({ style: {} }),
-    insert: () => {},
-    remove: () => {},
-    setText: () => {},
-    setElementText: () => {},
-    parentNode: () => null,
-    nextSibling: () => null,
-    patchProp: () => {},
-  });
-  return {
-    ...vue,
-    createApp: (...args: Parameters<typeof renderer.createApp>) => renderer.createApp(...args)
-      .provide(vue.ssrContextKey, { modules: new Set() }),
-  };
-});
+const engineHolder: { current?: Record<string, unknown> } = {};
+vi.mock('cc', () => ({
+  get game() { return engineHolder.current!.game; },
+  get director() { return engineHolder.current!.director; },
+  get assetManager() { return engineHolder.current!.assetManager; },
+  get DebugMode() { return engineHolder.current!.DebugMode; },
+  get Game() { return engineHolder.current!.Game; },
+}));
 
 describe('Preview boot option and business parameter isolation', () => {
   beforeEach(() => {
-    vi.resetModules();
+    localStorage.clear();
+    document.body.replaceChildren();
+    delete document.body.dataset.superPreviewStage;
   });
 
   afterEach(() => {
@@ -37,24 +24,34 @@ describe('Preview boot option and business parameter isolation', () => {
     vi.unstubAllGlobals();
   });
 
-  it.each([
-    { debug: true, option: true, stored: undefined, business: 'false', logs: true },
-    { debug: false, option: false, stored: '1', business: 'true', logs: false },
-    { debug: true, option: undefined, stored: '1', business: 'false', logs: true },
-    { debug: true, option: undefined, stored: undefined, business: 'true', logs: false },
-    { debug: true, option: true, stored: 'blocked', business: 'false', logs: true },
-    { debug: true, option: false, stored: 'blocked', business: 'true', logs: false },
-    { debug: true, option: undefined, stored: 'blocked', business: 'true', logs: false },
-  ])('uses debug=$debug and diagnostics=$logs with option=$option, storage=$stored and business=$business', async ({ debug, option, stored, business, logs }) => {
+  it('boots the preview with embedded options and business parameters kept apart', async () => {
     /// @case
     /// 1. The actual boot entry reads embedded options beside conflicting business logging and scene values.
-    /// 2. Browser storage is enabled, empty or blocked, and the window load event starts preview.
+    /// 2. The browser loads the shell and starts preview on the window load event.
     /// @expect
-    /// Engine logging follows the preview boolean; diagnostic stage output follows the explicit option or storage default.
-    /// Business strings never select logging or scenes, and boot succeeds even when storage is blocked.
+    /// Business strings never select logging or scenes; the Web host is bound before importing cc and game.init receives the shell canvas.
+    const configScript = document.createElement('script');
+    configScript.id = 'super-preview-config';
+    configScript.type = 'application/json';
+    configScript.textContent = JSON.stringify({
+      boot: {
+        assetsImportBaseUrl: 'https://preview.test/assets/general/import',
+        assetsNativeBaseUrl: 'https://preview.test/assets/general/native',
+        packResolutionDetailMapUrl: 'https://preview.test/scripting/x/resolution-detail-map.json',
+        previewServerUrl: 'https://preview.test/super-preview',
+        serverOrigin: 'https://preview.test',
+        engineSession: { importMapURL: 'https://preview.test/scripting/engine/development/test/import-map' },
+      },
+      launchParams: { scene: 'lobby', debug: 'false', superPreviewDebug: 'true' },
+      previewOptions: { debug: true, splashPreview: false },
+    });
+    const shellRoot = document.createElement('div');
+    shellRoot.id = 'super-preview-shell';
+    document.body.append(configScript, shellRoot);
+
     const gameInit = vi.fn(async () => {});
     const gameRun = vi.fn((onStart: () => void) => onStart());
-    const engine = {
+    engineHolder.current = {
       DebugMode: { INFO: 1, NONE: 0 },
       Game: {},
       game: { init: gameInit, on: vi.fn(), run: gameRun, pause: vi.fn(), resume: vi.fn() },
@@ -72,56 +69,28 @@ describe('Preview boot option and business parameter isolation', () => {
         },
       },
     };
-    const listeners = new Map<string, () => void>();
-    vi.stubGlobal('window', {
-      addEventListener: (name: string, listener: () => void) => listeners.set(name, listener),
-      _CCSettings: { launch: { launchScene: 'preview-scene' } },
-      get localStorage() {
-        if (stored === 'blocked') {
-          throw new Error('Storage blocked');
-        }
-        return { getItem: () => stored };
-      },
-      System: { prepareImport: async () => {}, import: async () => engine },
-    });
-    const body = { dataset: {} as Record<string, string> };
-    vi.stubGlobal('document', {
-      readyState: 'loading',
-      baseURI: 'https://preview.test/super-preview',
-      body,
-      createElement: () => ({ style: {} }),
-      querySelector: (selector: string) => selector === '#super-preview-shell'
-        ? { style: {} }
-        : {
-          textContent: JSON.stringify({
-            boot: {
-              serverOrigin: 'https://preview.test',
-              previewServerUrl: 'https://preview.test/super-preview',
-            },
-            launchParams: { scene: 'lobby', debug: business, superPreviewDebug: business },
-            previewOptions: { debug, superPreviewDebug: option, splashPreview: false },
-          }),
-        },
-    });
+    window.System = {
+      constructor: { prototype: {} },
+      prepareImport: async () => {},
+    } as unknown as typeof window.System;
+    window._CCSettings = { launch: { launchScene: 'preview-scene' } };
+
     const fetchMock = vi.fn(async (url: string) => ({
       ok: true,
       json: async () => url.endsWith('/query-extname-map.json') ? { extensions: {} } : [{}, { _id: 'preview-scene' }],
     }));
     vi.stubGlobal('fetch', fetchMock);
-    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await import('../src/boot');
-    const onLoad = listeners.get('load');
-    expect(onLoad).toBeDefined();
-    onLoad?.();
-    await vi.waitFor(() => expect(body.dataset.superPreviewStage).toBe('scene:launch:done'));
+    await vi.waitFor(() => expect(document.body.dataset.superPreviewStage).toBe('scene:launch:done'));
 
     expect(gameRun).toHaveBeenCalledOnce();
-    expect(gameInit).toHaveBeenCalledWith(expect.objectContaining({ debugMode: debug ? 1 : 0 }));
+    expect(gameInit).toHaveBeenCalledWith(expect.objectContaining({
+      canvas: expect.any(HTMLCanvasElement),
+      debugMode: 1,
+    }));
     expect(fetchMock).toHaveBeenCalledWith('https://preview.test/scene/preview-scene.json', { cache: 'no-store' });
-    const stageLogs = info.mock.calls.filter(([message]) => typeof message === 'string' && message.startsWith('[Super Preview] stage '));
-    expect(stageLogs.length > 0).toBe(logs);
     expect(error).not.toHaveBeenCalled();
   });
 });

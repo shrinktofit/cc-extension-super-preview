@@ -5,7 +5,10 @@ import { installQueryExtnamePipe } from './query-extname';
 import { startLaunchScene } from './scene';
 
 export interface CCPreviewSettings extends Record<string, unknown> {
-  assets?: Record<string, unknown>;
+  assets?: Record<string, unknown> & {
+    bundleBase?: string;
+    server?: string;
+  };
   launch?: Record<string, unknown> & { launchScene?: string };
   path?: Record<string, unknown>;
   preview?: Record<string, unknown> & {
@@ -58,11 +61,15 @@ export async function bootEngineReady(
   ui.reportBootStage('query-extname-map:install');
   await installQueryExtnamePipe(config);
 
+  const canvas = document.querySelector<HTMLCanvasElement>('#GameCanvas')!;
+
   ui.reportBootStage('game:init');
-  await game.init({
+  const gameOptions: import('cc').IGameConfig & { canvas: HTMLCanvasElement } = {
+    canvas,
     debugMode: previewOptions.debug ? DebugMode.INFO : DebugMode.NONE,
     overrideSettings,
-  });
+  };
+  await game.init(gameOptions);
 
   ui.reportBootStage('game:init:done');
 
@@ -99,27 +106,24 @@ function createOverrideSettings(
   launchSettings: CCPreviewSettings['launch'],
   config: SuperPreviewBootConfig,
 ): CCOverrideSettings {
+  const serverRoot = `${config.serverOrigin}/`;
   const resourceUrls = settings.preview?.resourceUrls;
+  const server = resourceUrls?.server ?? settings.assets?.server ?? '';
   const effectSettingsPath = settings.rendering?.effectSettingsPath;
-  const absoluteEffectSettingsPath = effectSettingsPath
-    && (/^[a-z][a-z0-9+.-]*:/iu.test(effectSettingsPath) || effectSettingsPath.startsWith('//'));
   const rendering = {
     ...(settings.rendering ?? {}),
-    effectSettingsPath: !effectSettingsPath || absoluteEffectSettingsPath
-      ? effectSettingsPath
-      : effectSettingsPath.startsWith('/')
-        ? `${config.serverOrigin}${effectSettingsPath}`
-        : `${config.serverOrigin}/${effectSettingsPath.replace(/^(?:\.\/)+/u, '')}`,
+    effectSettingsPath: effectSettingsPath ? new URL(effectSettingsPath, serverRoot).href : effectSettingsPath,
   };
   const overrideSettings: CCOverrideSettings = {
     ...settings,
     assets: {
       ...(settings.assets ?? {}),
-      importBase: resourceUrls?.importBase ?? config.assetsImportBaseUrl,
-      nativeBase: resourceUrls?.nativeBase ?? config.assetsNativeBaseUrl,
+      importBase: new URL(resourceUrls?.importBase ?? config.assetsImportBaseUrl, serverRoot).href,
+      nativeBase: new URL(resourceUrls?.nativeBase ?? config.assetsNativeBaseUrl, serverRoot).href,
+      bundleBase: new URL(settings.assets?.bundleBase || 'assets/', serverRoot).href,
       remoteBundles: [...(resourceUrls?.remoteBundles ?? [])],
       subpackages: [...(resourceUrls?.subpackages ?? [])],
-      ...(resourceUrls?.server === undefined ? {} : { server: resourceUrls.server }),
+      server: new URL(server.endsWith('/') ? server : `${server}/`, serverRoot).href,
     },
     launch: {
       ...(launchSettings ?? {}),

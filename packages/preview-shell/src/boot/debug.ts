@@ -1,4 +1,4 @@
-import { getSuperPreviewConfig } from '../config';
+import { getSuperPreviewConfig } from '../config.js';
 
 let superPreviewDebugLogging: boolean | undefined;
 

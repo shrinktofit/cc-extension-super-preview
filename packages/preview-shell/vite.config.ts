@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   plugins: [vue()],
@@ -8,11 +7,7 @@ export default defineConfig({
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
   },
-  resolve: {
-    alias: {
-      cc: fileURLToPath(new URL('./src/boot/cc.ts', import.meta.url)),
-    },
-  },
+
   build: {
     target: 'es2022',
     outDir: 'lib',
@@ -32,6 +27,9 @@ export default defineConfig({
     rollupOptions: {
       external: [
         'super-preview',
+        'cc',
+        'cc/env',
+        'pal/screen-adapter/web',
       ],
       output: {
         assetFileNames: 'assets/[name][extname]',
