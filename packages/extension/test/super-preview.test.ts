@@ -24,6 +24,29 @@ interface ResponseState {
 }
 
 const messageRequest = vi.fn();
+
+const engineImportMap = {
+  imports: {
+    cc: '/scripting/engine/development/test/cc.mjs',
+    'cc/env': '/scripting/engine/development/test/env.mjs',
+  },
+};
+
+vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+  const url = String(input);
+  if (url.includes('/scripting/engine/development/session')) {
+    return new Response(JSON.stringify({
+      importMapURL: '/scripting/engine/development/test/import-map',
+    }), { headers: { 'content-type': 'application/json' }, status: 200 });
+  }
+  if (url.endsWith('/scripting/engine/development/test/import-map')) {
+    return new Response(JSON.stringify(engineImportMap), {
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    });
+  }
+  throw new Error(`Unexpected fetch: ${url}`);
+}));
 const messageSend = vi.fn();
 const clipboardWrite = vi.fn();
 const profileGetConfig = vi.fn();
@@ -218,7 +241,7 @@ describe('Super Preview extension surfaces', () => {
     expect(state.body).toEqual(expect.stringContaining('/settings.js?scene=request-scene-uuid'));
     expect(state.body).toEqual(expect.stringContaining('splashPreview=true'));
     expect(state.body).toEqual(expect.stringContaining(
-      'https://preview.test/super-preview/engine/bundled/index.js',
+      '"cc": "/scripting/engine/development/test/cc.mjs"',
     ));
     const config = readEmbeddedConfig(String(state.body));
     expect(config).toMatchObject({

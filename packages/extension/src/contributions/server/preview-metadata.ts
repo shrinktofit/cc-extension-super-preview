@@ -1,28 +1,24 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { URL } from 'node:url';
-import { enginePreviewRoutePrefix, superPreviewRoutePrefix } from '../../constants.js';
+import { superPreviewRoutePrefix } from '../../constants.js';
 import type { LaunchParams, PreviewOptions } from '../../launch-params.js';
 import { logger } from '../../logger.js';
 import { writeServerDiagnosticLog } from './diagnostic-log.js';
-import { queryEnginePreviewRoot } from './engine-preview.js';
 import { currentScene } from '../../scene-protocol.js';
 import type { Request } from 'express';
+
+export interface EngineImportMap {
+  imports: Record<string, string | null>;
+}
+
+export interface EngineSessionInfo {
+  importMapURL: string;
+}
 
 export interface PreviewMetadata {
   assetsImportBaseUrl: string;
   assetsNativeBaseUrl: string;
-  engineBundleUrl: string;
-  engineImportMapUrl: string;
-  engineImportGuide?: {
-    url: string;
-    options: {
-      platform: string;
-      mode: string;
-      features: readonly string[];
-      flags: Readonly<Record<string, boolean | number>>;
-    };
-  };
+  engineImportMap: EngineImportMap;
+  engineSession: EngineSessionInfo;
   globalImportMapUrl: string;
   launchParams: LaunchParams;
   launchScene: string;
@@ -39,8 +35,6 @@ export interface PreviewMetadata {
 }
 
 interface PreviewServerResources {
-  engineBundlePath: string;
-  engineImportMapPath: string;
   globalImportMapPath: string;
   packImportMapPath: string;
   packResolutionDetailMapPath: string;
@@ -57,25 +51,13 @@ export async function createPreviewMetadata(
   const launchScene = await selectLaunchScene(requestedScene);
   const { splashPreview } = previewOptions;
   const resources = createPreviewServerResources(launchScene, splashPreview);
-  const enginePreviewRoot = await queryEnginePreviewRoot();
-  let engineImportGuide: PreviewMetadata['engineImportGuide'];
-  if (existsSync(join(enginePreviewRoot, 'import-guide.js'))) {
-    const environment = { platform: 'HTML5', mode: 'PREVIEW', flags: { DEBUG: previewOptions.debug } };
-    const profile = await Editor.Message.request('engine', 'query-engine-modules-profile', undefined, environment) as {
-      includeModules: string[];
-    };
-    engineImportGuide = {
-      // The editor's engine asset loader recognizes this base for engine_external redirects.
-      url: `${serverOrigin}/scripting/engine/import-guide.js`,
-      options: { ...environment, features: profile.includeModules },
-    };
-  }
+  const { importMap: engineImportMap, session: engineSession } = await queryEngineSession(serverOrigin, previewOptions.debug);
   const previewServerUrl = `${serverOrigin}/${superPreviewRoutePrefix}`;
   const webAppManifestUrl = createPreviewRequestUrl(request);
   webAppManifestUrl.pathname = `${webAppManifestUrl.pathname.replace(/\/$/u, '')}/manifest.webmanifest`;
 
   logger.debug(
-    `preview metadata request: origin=${serverOrigin}, scene=${launchScene}, settings=${resources.settingsJsPath}, engine=${engineImportGuide?.url ?? resources.engineBundlePath}`,
+    `preview metadata request: origin=${serverOrigin}, scene=${launchScene}, settings=${resources.settingsJsPath}, engine=${engineSession.importMapURL}`,
   );
   writeServerDiagnosticLog('info', 'preview-metadata-resolved', {
     launchScene,
@@ -89,9 +71,8 @@ export async function createPreviewMetadata(
   return {
     assetsImportBaseUrl: `${serverOrigin}/assets/general/import`,
     assetsNativeBaseUrl: `${serverOrigin}/assets/general/native`,
-    engineBundleUrl: toServerUrl(resources.engineBundlePath, serverOrigin),
-    engineImportMapUrl: toServerUrl(resources.engineImportMapPath, serverOrigin),
-    engineImportGuide,
+    engineImportMap,
+    engineSession,
     globalImportMapUrl: toServerUrl(resources.globalImportMapPath, serverOrigin),
     launchParams,
     launchScene,
@@ -108,6 +89,37 @@ export async function createPreviewMetadata(
   };
 }
 
+async function queryEngineSession(
+  serverOrigin: string,
+  debug: boolean,
+): Promise<{ importMap: EngineImportMap; session: EngineSessionInfo }> {
+  const searchParams = new URLSearchParams({
+    flags: `DEBUG:${debug}`,
+    mode: 'PREVIEW',
+    platform: 'HTML5',
+  });
+  const sessionUrl = `${serverOrigin}/scripting/engine/development/session?${searchParams}`;
+  try {
+    const session = await fetchJson(sessionUrl) as EngineSessionInfo;
+    const importMapURL = new URL(session.importMapURL, `${serverOrigin}/`).href;
+    const importMap = await fetchJson(importMapURL) as EngineImportMap;
+    return { importMap, session: { importMapURL } };
+  } catch (error) {
+    throw new Error(
+      `Super Preview requires an engine with a universal ESM output: ${String(error)}`,
+    );
+  }
+}
+
+async function fetchJson(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`GET ${url} failed with status ${response.status}`);
+  }
+  return response.json();
+}
+
+
 async function selectLaunchScene(scene: string | undefined) {
   const requestedScene = scene?.trim();
   const configuredScene = requestedScene
@@ -122,10 +134,7 @@ function createPreviewServerResources(
   launchScene: string,
   splashPreview: boolean,
 ): PreviewServerResources {
-  const enginePreviewBasePath = `/${enginePreviewRoutePrefix}`;
   return {
-    engineBundlePath: `${enginePreviewBasePath}/bundled/index.js`,
-    engineImportMapPath: `${enginePreviewBasePath}/import-map.json`,
     globalImportMapPath: '/scripting/import-map-global',
     packImportMapPath: '/scripting/x/import-map.json',
     packResolutionDetailMapPath: '/scripting/x/resolution-detail-map.json',

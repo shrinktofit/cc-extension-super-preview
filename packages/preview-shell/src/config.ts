@@ -1,18 +1,14 @@
+export interface EngineSessionInfo {
+  importMapURL: string;
+}
+
 export interface SuperPreviewBootConfig {
   assetsImportBaseUrl: string;
   assetsNativeBaseUrl: string;
   packResolutionDetailMapUrl: string;
   previewServerUrl: string;
   serverOrigin: string;
-  engineImportGuide?: {
-    url: string;
-    options: {
-      platform: string;
-      mode: string;
-      features: readonly string[];
-      flags: Readonly<Record<string, boolean | number>>;
-    };
-  };
+  engineSession: EngineSessionInfo;
 }
 
 export interface SuperPreviewOptions {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PreviewShellUi } from '../src/boot/shell-ui';
 import type { SuperPreviewBootConfig } from '../src/config';
 
@@ -43,11 +43,14 @@ vi.mock('../src/boot/engine-ready/scene', () => ({
 }));
 
 const { bootEngineReady } = await import('../src/boot/engine-ready/index');
+const canvas = document.createElement('canvas');
+canvas.id = 'GameCanvas';
 
 const config: SuperPreviewBootConfig = {
   assetsImportBaseUrl: 'https://preview.test/assets/general/import',
   assetsNativeBaseUrl: 'https://preview.test/assets/general/native',
   packResolutionDetailMapUrl: 'https://preview.test/scripting/x/resolution-detail-map.json',
+  engineSession: { importMapURL: 'https://preview.test/scripting/engine/development/test/import-map' },
   previewServerUrl: 'https://preview.test/super-preview',
   serverOrigin: 'https://preview.test',
 };
@@ -63,19 +66,20 @@ const ui = {
 describe('Preview Shell scene selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('document', {
-      baseURI: 'https://preview.test/super-preview',
-    });
+    document.body.replaceChildren(canvas);
+  });
+
+  afterEach(() => {
+    delete (window as { _CCSettings?: unknown })._CCSettings;
+    vi.unstubAllGlobals();
   });
 
   it('launches the scene selected by preview settings', async () => {
-    vi.stubGlobal('window', {
-      _CCSettings: {
-        launch: {
-          launchScene: 'settings-scene',
-        },
+    window._CCSettings = {
+      launch: {
+        launchScene: 'settings-scene',
       },
-    });
+    };
 
     await bootEngineReady(ui, config, { debug: true });
 
@@ -87,9 +91,7 @@ describe('Preview Shell scene selection', () => {
   });
 
   it('uses the current-scene marker when settings omit a scene', async () => {
-    vi.stubGlobal('window', {
-      _CCSettings: {},
-    });
+    window._CCSettings = {};
 
     await bootEngineReady(ui, config, { debug: true });
 
@@ -106,32 +108,32 @@ describe('Preview Shell scene selection', () => {
     /// 2. Super Preview initializes the engine and launches the selected scene.
     /// @expect
     /// Asset requests and the scene JSON request use the supplied client namespace.
-    vi.stubGlobal('window', {
-      _CCSettings: {
-        launch: {
-          launchScene: 'settings-scene',
-        },
-        preview: {
-          resourceUrls: {
-            importBase: '/oh-my-headless/client/browser/assets/general/import',
-            remoteBundles: ['main', 'resources'],
-            sceneBase: '/oh-my-headless/client/browser/scene',
-            server: '/oh-my-headless/client/browser/',
-          },
+    window._CCSettings = {
+      launch: {
+        launchScene: 'settings-scene',
+      },
+      preview: {
+        resourceUrls: {
+          importBase: '/oh-my-headless/client/browser/assets/general/import',
+          remoteBundles: ['main', 'resources'],
+          sceneBase: '/oh-my-headless/client/browser/scene',
+          server: '/oh-my-headless/client/browser/',
         },
       },
-    });
+    };
 
     await bootEngineReady(ui, config, { debug: true });
 
     expect(mocks.gameInit).toHaveBeenCalledWith({
+      canvas,
       debugMode: 1,
       overrideSettings: expect.objectContaining({
         assets: expect.objectContaining({
-          importBase: '/oh-my-headless/client/browser/assets/general/import',
+          importBase: 'https://preview.test/oh-my-headless/client/browser/assets/general/import',
           nativeBase: config.assetsNativeBaseUrl,
+          bundleBase: 'https://preview.test/assets/',
           remoteBundles: ['main', 'resources'],
-          server: '/oh-my-headless/client/browser/',
+          server: 'https://preview.test/oh-my-headless/client/browser/',
           subpackages: [],
         }),
       }),
@@ -143,13 +145,74 @@ describe('Preview Shell scene selection', () => {
     );
   });
 
+  it('anchors default bundle and effect requests to the preview server root', async () => {
+    /// @case
+    /// 1. A nested Super Preview preset boots without resource URL overrides.
+    /// 2. Engine settings contain a relative effect path and an empty remote server.
+    /// @expect
+    /// The engine receives absolute resource URLs rooted at the preview server, not the preset route.
+    window._CCSettings = {
+      assets: { server: '' },
+      rendering: { effectSettingsPath: 'src/effect.bin' },
+    };
+
+    await bootEngineReady(ui, config, { debug: true });
+
+    expect(mocks.gameInit).toHaveBeenCalledWith(expect.objectContaining({
+      overrideSettings: expect.objectContaining({
+        assets: expect.objectContaining({
+          importBase: config.assetsImportBaseUrl,
+          nativeBase: config.assetsNativeBaseUrl,
+          bundleBase: 'https://preview.test/assets/',
+          server: 'https://preview.test/',
+        }),
+        rendering: { effectSettingsPath: 'https://preview.test/src/effect.bin' },
+        path: { previewServer: config.previewServerUrl },
+      }),
+    }));
+  });
+
+  it('preserves independent resource hosts and the configured bundle directory', async () => {
+    /// @case
+    /// 1. Settings use separate CDN locations for bundles, native assets and effects.
+    /// 2. The remote server directory is specified without a trailing slash.
+    /// @expect
+    /// URL preparation preserves each resource host and makes the remote server ready for bundle path concatenation.
+    window._CCSettings = {
+      assets: {
+        bundleBase: 'https://bundles.test/game/',
+        server: 'https://remote.test/game',
+      },
+      preview: {
+        resourceUrls: {
+          importBase: 'assets/custom/import',
+          nativeBase: 'https://native.test/game/',
+        },
+      },
+      rendering: { effectSettingsPath: '//effects.test/effect.bin' },
+    };
+
+    await bootEngineReady(ui, config, { debug: true });
+
+    expect(mocks.gameInit).toHaveBeenCalledWith(expect.objectContaining({
+      overrideSettings: expect.objectContaining({
+        assets: expect.objectContaining({
+          importBase: 'https://preview.test/assets/custom/import',
+          nativeBase: 'https://native.test/game/',
+          bundleBase: 'https://bundles.test/game/',
+          server: 'https://remote.test/game/',
+        }),
+        rendering: { effectSettingsPath: 'https://effects.test/effect.bin' },
+      }),
+    }));
+  });
   it('stops booting when Preview settings were not loaded', async () => {
     /// @case
     /// 1. The Preview settings script fails before defining window._CCSettings.
     /// 2. Super Preview attempts to boot.
     /// @expect
     /// Boot fails explicitly without initializing the engine or loading full resources.
-    vi.stubGlobal('window', {});
+    delete (window as { _CCSettings?: unknown })._CCSettings;
 
     await expect(bootEngineReady(ui, config, { debug: true })).rejects.toThrow(
       '[Super Preview] Preview settings were not loaded',

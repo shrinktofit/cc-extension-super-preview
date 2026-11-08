@@ -8,7 +8,7 @@ import {
 } from 'node:path';
 import { render as renderEjs } from 'ejs';
 import { superPreviewRoutePrefix } from '../../constants.js';
-import { createPreviewRequestUrl, type PreviewMetadata } from './preview-metadata.js';
+import { createPreviewRequestUrl, type EngineImportMap, type EngineSessionInfo, type PreviewMetadata } from './preview-metadata.js';
 import type { Request, Response } from 'express';
 
 const previewShellPackageName = '@bsgames/cc-extension-super-preview-preview-shell';
@@ -20,7 +20,7 @@ interface BootConfig {
   packResolutionDetailMapUrl: string;
   previewServerUrl: string;
   serverOrigin: string;
-  engineImportGuide?: PreviewMetadata['engineImportGuide'];
+  engineSession: EngineSessionInfo;
 }
 
 interface SuperPreviewConfig {
@@ -33,9 +33,6 @@ interface PreviewShellTemplateLocals {
   baseHref: string;
   bootScriptUrl: string;
   configJson: string;
-  engineBundleUrl: string;
-  engineImportMapUrl: string;
-  engineImportGuide: PreviewMetadata['engineImportGuide'];
   globalImportMapUrl: string;
   packImportMapUrl: string;
   packResolutionDetailMapUrlJson: string;
@@ -78,16 +75,16 @@ export function renderSuperPreviewHtml(metadata: PreviewMetadata) {
     baseHref: `${metadata.serverOrigin}/`,
     bootScriptUrl: toPreviewShellAssetUrl(metadata.serverOrigin, bootEntry.file),
     configJson: toScriptJson(config),
-    engineBundleUrl: metadata.engineBundleUrl,
-    engineImportMapUrl: metadata.engineImportMapUrl,
-    engineImportGuide: metadata.engineImportGuide,
     globalImportMapUrl: metadata.globalImportMapUrl,
     packImportMapUrl: metadata.packImportMapUrl,
     packResolutionDetailMapUrlJson: toScriptJson(metadata.packResolutionDetailMapUrl),
     polyfillsUrl: metadata.polyfillsUrl,
     projectName: Editor.Project.name,
     runtimeImportMapJson: toScriptJson(
-      createRuntimeImportMap(metadata.serverOrigin, runtimeEntry.file),
+      createRuntimeImportMap(metadata.serverOrigin, runtimeEntry.file, {
+        ...metadata.engineImportMap.imports,
+        'pal/script-runner': toPreviewShellAssetUrl(metadata.serverOrigin, 'assets/script-runner.js'),
+      }),
     ),
     runtimeSystemImportMapJson: toScriptJson(
       createRuntimeImportMap(metadata.serverOrigin, 'assets/runtime.system.js'),
@@ -112,10 +109,15 @@ export function renderSuperPreviewWebAppManifest(request: Request) {
   }, { filename: templatePath });
 }
 
-function createRuntimeImportMap(serverOrigin: string, assetPath: string) {
+function createRuntimeImportMap(
+  serverOrigin: string,
+  assetPath: string,
+  extraImports: Record<string, string> = {},
+) {
   return {
     imports: {
       'super-preview': toPreviewShellAssetUrl(serverOrigin, assetPath),
+      ...extraImports,
     },
   };
 }
@@ -140,7 +142,7 @@ function createBootConfig(metadata: PreviewMetadata): BootConfig {
     packResolutionDetailMapUrl: metadata.packResolutionDetailMapUrl,
     previewServerUrl: metadata.previewServerUrl,
     serverOrigin: metadata.serverOrigin,
-    engineImportGuide: metadata.engineImportGuide,
+    engineSession: metadata.engineSession,
   };
 }
 
@@ -254,7 +256,7 @@ function getContentType(filePath: string) {
 }
 
 function toScriptJson(value: unknown) {
-  return JSON.stringify(value)
+  return JSON.stringify(value, undefined, 2)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
     .replaceAll('&', '\\u0026');

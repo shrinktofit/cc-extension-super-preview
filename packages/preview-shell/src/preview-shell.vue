@@ -1,9 +1,16 @@
 <template>
   <div id="content">
-    <div id="GameDiv">
-      <div id="Cocos3dGameContainer">
+    <div
+      id="GameDiv"
+      ref="game-frame"
+    >
+      <div
+        id="Cocos3dGameContainer"
+        ref="game-container"
+      >
         <canvas
           id="GameCanvas"
+          ref="game-canvas"
           tabindex="-1"
         />
       </div>
@@ -21,7 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { reactive, ref, useTemplateRef } from 'vue';
+import type { PreviewHost } from './boot/preview-host';
 import { logSuperPreviewDebug } from './boot/debug';
 import ErrorOverlay from './error-overlay.vue';
 import LoadingProgressBar from './loading-progress-bar.vue';
@@ -30,6 +38,10 @@ interface ErrorInfo {
   message: string;
   stack: string;
 }
+
+const gameFrame = useTemplateRef<HTMLDivElement>('game-frame');
+const gameContainer = useTemplateRef<HTMLDivElement>('game-container');
+const gameCanvas = useTemplateRef<HTMLCanvasElement>('game-canvas');
 
 const loading = ref(false);
 const progressWidth = ref('0%');
@@ -66,7 +78,18 @@ function showError(info: ErrorInfo) {
   errorVisible.value = true;
 }
 
+function getPreviewHost(): PreviewHost {
+  const canvas = gameCanvas.value;
+  const container = gameContainer.value;
+  const frame = gameFrame.value;
+  if (!canvas || !container || !frame) {
+    throw new Error('Super Preview shell elements were not rendered');
+  }
+  return { canvas, container, frame };
+}
+
 defineExpose({
+  getPreviewHost,
   hideSplash,
   reportBootStage,
   reportLoadProgress,

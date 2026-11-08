@@ -1,7 +1,9 @@
-import { getBootConfig } from './config';
-import { installErrorHandlers } from './error-tools';
-import { PreviewShellUi } from './shell-ui';
-import { getSuperPreviewConfig } from '../config';
+import { getBootConfig } from './config.js';
+import { installErrorHandlers } from './error-tools.js';
+import { installEsmSystemJsBridge } from './esm-systemjs-bridge.js';
+import { PreviewShellUi } from './shell-ui.js';
+import { getSuperPreviewConfig } from '../config.js';
+import type { PreviewHost } from './preview-host.js';
 
 if (document.readyState === 'loading') {
   window.addEventListener('load', startBoot);
@@ -31,10 +33,30 @@ async function boot(ui: PreviewShellUi) {
     previewServerUrl: config.previewServerUrl,
   });
 
-  ui.reportBootStage('system:import-cc');
-  await import('./cc');
-  ui.reportBootStage('system:import-cc:done');
+  ui.reportBootStage('system:bind-web-host');
+  await bindWebHost(ui.getPreviewHost());
 
-  const { bootEngineReady } = await import('./engine-ready');
+  ui.reportBootStage('system:setup-systemjs');
+  await setupSystemJS();
+
+  ui.reportBootStage('system:engine-ready');
+  const { bootEngineReady } = await import('./engine-ready/index.js');
+  ui.reportBootStage('system:engine-ready:done');
   await bootEngineReady(ui, config, getSuperPreviewConfig().previewOptions);
+}
+
+async function bindWebHost(host: PreviewHost) {
+  const { screenAdapter } = await import('pal/screen-adapter/web');
+  screenAdapter.bindHost({ container: host.container, frame: host.frame });
+}
+
+async function setupSystemJS() {
+  const system = window.System;
+  if (!system) {
+    throw new Error('SystemJS was not loaded');
+  }
+  await system.prepareImport?.(true);
+
+  // Project scripts keep importing engine modules through SystemJS.
+  installEsmSystemJsBridge(system, ['cc', 'cc/env']);
 }
